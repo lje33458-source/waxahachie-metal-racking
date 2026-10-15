@@ -1,0 +1,1134 @@
+{
+ "parts": [
+  {
+   "k": "p63",
+   "number": "ATP-6061T6-063-48144",
+   "description": "Sheet, Aluminum - NO PVC, 6061-T6, 0.063\" Thick, 144\" x 48\"",
+   "partId": "63 Aluminum",
+   "qtyPerPallet": 12,
+   "dedicatedCase": "",
+   "qtyPerCase": ""
+  },
+  {
+   "k": "p80",
+   "number": "ATP-6061T6-080-48144",
+   "description": "Sheet, Aluminum - NO PVC, 6061-T6, 0.080\" Thick, 144\" x 48\"",
+   "partId": "80 Aluminum",
+   "qtyPerPallet": 12,
+   "dedicatedCase": "",
+   "qtyPerCase": ""
+  }
+ ],
+ "rows": [
+  {
+   "row": 2,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": [
+        {
+         "part": "p80",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": [
+        {
+         "part": "p80",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": [
+        {
+         "part": "p63",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": [
+        {
+         "part": "p63",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": [
+        {
+         "part": "p63",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": [
+        {
+         "part": "p63",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": [
+        {
+         "part": "p63",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": [
+        {
+         "part": "p63",
+         "qty": 12
+        }
+       ]
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 3,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 4,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 5,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 6,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 7,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 8,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 9,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 10,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "row": 11,
+   "racks": [
+    {
+     "rack": 1,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    },
+    {
+     "rack": 2,
+     "label": "12 ft",
+     "levels": [
+      {
+       "level": 9,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 8,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 7,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 6,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 5,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 4,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 3,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 2,
+       "height": 17,
+       "items": []
+      },
+      {
+       "level": 1,
+       "height": 17,
+       "items": []
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
