@@ -5,7 +5,7 @@ var me=null;            // {id, role}
 var server=null;        // last data loaded/saved from the server
 var state=null;         // working copy being edited
 var dirty=false,saving=false,newer=null,saveErr='';
-var ui={tab:'racking',row:null,armed:null,account:false};
+var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master' or 'admin'; rows holds the picked row per section
 var admin={users:[],log:[],msg:'',err:'',created:null,resetFor:null,armed:null};
 
 /* ---------- helpers ---------- */
@@ -20,6 +20,11 @@ function partName(p){return p.partId||p.number||'Unnamed part'}
 function canEdit(){return me&&me.role!=='viewer'}
 function isAdmin(){return me&&me.role==='admin'}
 function dis(){return canEdit()?'':' disabled'}
+function sec(k){k=k||ui.tab;for(var i=0;i<state.sections.length;i++)if(state.sections[i].key===k)return state.sections[i];return null}
+function rows(){var s=sec();return s?s.rows:[]}
+function rowKey(s,r){return s.key+'|'+r.row}
+function sameRow(a,b){return a!=null&&b!=null&&String(a)===String(b)}
+function eachLevel(fn){state.sections.forEach(function(s){s.rows.forEach(function(r){r.racks.forEach(function(rk){rk.levels.forEach(function(lv){fn(lv,s,r)})})})})}
 function store(k,v){try{if(v===undefined)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function load(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return null}}
 function refocus(id){var e=document.getElementById(id);if(e)e.focus()}
@@ -38,7 +43,7 @@ function api(method,url,body){
 /* ---------- sign in ---------- */
 function showLogin(msg){
   root.innerHTML='<div class="login-wrap"><form class="login" id="login-form" autocomplete="on">'+
-    '<div class="brand"><div class="mark" aria-hidden="true"></div><h1>Waxahachie Metal Racking</h1></div>'+
+    '<div class="brand"><div class="mark" aria-hidden="true"></div><h1>Americase Visual Inventory</h1></div>'+
     '<div class="field"><label for="login-id">User ID</label><input id="login-id" name="username" autocomplete="username" required autocapitalize="none" spellcheck="false"></div>'+
     '<div class="field"><label for="login-pk">Passkey</label><input id="login-pk" name="password" type="password" autocomplete="current-password" required></div>'+
     '<p class="err" id="login-err" role="alert">'+esc(msg||'')+'</p>'+
@@ -57,13 +62,14 @@ document.addEventListener('submit',function(e){
 
 function start(){
   return api('GET','/api/data').then(function(d){
-    server=d;state=clone({parts:d.parts,rows:d.rows});dirty=false;newer=null;saveErr='';
+    server=d;state=clone({parts:d.parts,sections:d.sections});dirty=false;newer=null;saveErr='';
     var pref=load('wmr-ui:'+me.id)||{};
-    ui.tab=pref.tab||'racking';if(ui.tab==='admin'&&!isAdmin())ui.tab='racking';
-    ui.row=state.rows.some(function(r){return r.row===pref.row})?pref.row:(state.rows[0]?state.rows[0].row:null);
+    ui.tab=pref.tab||'hq';if(ui.tab==='racking')ui.tab='hq';
+    if((ui.tab==='admin'&&!isAdmin())||(ui.tab!=='admin'&&ui.tab!=='master'&&!sec()))ui.tab='hq';
+    ui.rows=pref.rows||{};if(pref.row!=null&&ui.rows.hq==null)ui.rows.hq=pref.row;
     if(location.hash==='#master')ui.tab='master';
     var draft=load('wmr-draft:'+me.id);
-    if(draft&&draft.base===server.version&&canEdit()){state=draft.state;dirty=true}
+    if(draft&&draft.base===server.version&&canEdit()&&draft.state&&Array.isArray(draft.state.sections)){state=draft.state;dirty=true}
     else store('wmr-draft:'+me.id);
     render();
     if(ui.tab==='admin')loadAdmin();
@@ -73,8 +79,8 @@ function start(){
 /* ---------- totals ---------- */
 function totals(){
   var t={},loc={},byRow={},filled=0,slots=0;
-  state.rows.forEach(function(r){
-    var br=byRow[r.row]={_filled:0,_slots:0};
+  state.sections.forEach(function(s){s.rows.forEach(function(r){
+    var br=byRow[rowKey(s,r)]={_filled:0,_slots:0};
     r.racks.forEach(function(rk){rk.levels.forEach(function(lv){
       var has=false;slots++;br._slots++;
       lv.items.forEach(function(it){
@@ -85,19 +91,18 @@ function totals(){
       });
       if(has){filled++;br._filled++}
     })});
-  });
+  })});
   return {t:t,loc:loc,byRow:byRow,filled:filled,slots:slots};
 }
 
 function changed(){dirty=true;saveErr='';store('wmr-draft:'+me.id,{base:server.version,state:state});renderStatus()}
-function saveUi(){store('wmr-ui:'+me.id,{tab:ui.tab,row:ui.row})}
+function saveUi(){store('wmr-ui:'+me.id,{tab:ui.tab,rows:ui.rows})}
 
 /* ---------- render ---------- */
 function render(){
   var T=totals();
   root.innerHTML=
-    '<header class="top"><div class="brand"><div class="mark" aria-hidden="true"></div><div><h1>Waxahachie Metal Racking</h1>'+
-    '<div class="sub">HQ metal racking · location rows, racks and levels</div></div></div>'+
+    '<header class="top"><div class="brand"><div class="mark" aria-hidden="true"></div><div><h1>Americase Visual Inventory</h1></div></div>'+
     '<div class="top-right"><div class="userbar">Signed in as <b>'+esc(me.id)+'</b> <span class="role '+esc(me.role)+'">'+esc(me.role)+'</span> · '+
       '<button class="linkbtn" data-act="account">Change passkey</button> · <button class="linkbtn" data-act="logout">Sign out</button></div>'+
     '<div class="savebar" id="savebar"></div></div></header>'+
@@ -106,9 +111,9 @@ function render(){
       (dirty?'Your unsaved changes were made on the older version. Load the latest to continue; your edits will be discarded.':'')+'</span>'+
       '<button class="btn" data-act="reload">Load latest</button></div>':'')+
     '<nav class="tabs" role="tablist">'+
-      tab('racking','Racking')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
+      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
     '</nav>'+
-    '<section id="view">'+(ui.tab==='racking'?racking(T):ui.tab==='master'?master(T):adminView())+'</section>';
+    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='admin'?adminView():racking(T))+'</section>';
   renderStatus();
 }
 function tab(v,label){return '<button class="tab" role="tab" id="tab-'+v+'" aria-selected="'+(ui.tab===v)+'" data-act="tab" data-v="'+v+'">'+label+'</button>'}
@@ -135,19 +140,19 @@ function accountPanel(){
 }
 
 function racking(T){
-  var r=null,ri=-1;
-  state.rows.forEach(function(x,i){if(x.row===ui.row){r=x;ri=i}});
-  if(!r&&state.rows.length){r=state.rows[0];ri=0;ui.row=r.row}
+  var S=sec(),R=S.rows,r=null,ri=-1;
+  R.forEach(function(x,i){if(sameRow(x.row,ui.rows[S.key])){r=x;ri=i}});
+  if(!r&&R.length){r=R[0];ri=0;ui.rows[S.key]=r.row}
   var h='<div class="rowpick"><div class="label">Select row</div><div class="chips">';
-  state.rows.forEach(function(x){
-    var b=T.byRow[x.row];var pct=b._slots?Math.round(b._filled/b._slots*100):0;
-    h+='<button class="chip" data-act="row" data-v="'+x.row+'" aria-pressed="'+(x.row===ui.row)+'"><b>Row '+esc(x.row)+'</b>'+
+  R.forEach(function(x,i){
+    var b=T.byRow[rowKey(S,x)];var pct=b._slots?Math.round(b._filled/b._slots*100):0;
+    h+='<button class="chip" data-act="row" data-v="'+i+'" aria-pressed="'+(i===ri)+'"><b>Row '+esc(x.row)+'</b>'+
       '<span class="meter"><i style="width:'+pct+'%"></i></span><small class="num">'+b._filled+' / '+b._slots+' filled</small></button>';
   });
   if(canEdit())h+='<button class="chip add" data-act="addrow">+ Add row</button>';
   h+='</div></div>';
-  if(!r)return h+'<p class="empty-note">No rows yet.'+(canEdit()?' Add a row to start assigning parts.':'')+'</p>';
-  var b=T.byRow[r.row];
+  if(!r)return h+'<p class="empty-note">No rows in '+esc(S.name)+' yet.'+(canEdit()?' Add a row to start assigning parts.':'')+'</p>';
+  var b=T.byRow[rowKey(S,r)];
   h+='<div class="rowhead"><h2>Row '+esc(r.row)+'</h2><div class="pills">';
   var any=false;
   state.parts.forEach(function(p){if(b[p.k]!=null){any=true;h+='<span class="pill"><b class="num">'+fmt(b[p.k])+'</b> × '+esc(partName(p))+'</span>'}});
@@ -155,13 +160,19 @@ function racking(T){
   h+='<span class="pill muted num">'+b._filled+' of '+b._slots+' locations filled</span>';
   if(canEdit())h+='<button class="btn danger ghost'+(ui.armed==='row'?' armed':'')+'" data-act="delrow">'+(ui.armed==='row'?'Confirm remove Row '+esc(r.row):'Remove row')+'</button>';
   h+='</div></div><div class="racks">';
+  // Every level number used in this row, top first, so a rack missing a level shows a gap there.
+  var all={};r.racks.forEach(function(rk){rk.levels.forEach(function(lv){all[lv.level]=1})});
+  var levelNums=Object.keys(all).map(Number).sort(function(x,y){return y-x});
   r.racks.forEach(function(rk,ki){
     h+='<div class="rack"><div class="rack-h"><b>Rack '+esc(rk.rack)+'</b><span>'+esc(rk.label)+'</span></div><div class="frame">';
-    rk.levels.forEach(function(lv,li){
+    levelNums.forEach(function(n){
+      var li=-1;rk.levels.forEach(function(x,i){if(x.level===n&&li<0)li=i});
+      if(li<0){h+='<div class="level gap"><div class="addr"><span class="tagl">'+esc(r.row+'-'+rk.rack+'-'+n)+'</span></div><div class="lines"><span class="gapnote">No slot</span></div></div>';return}
+      var lv=rk.levels[li];
       var addr=r.row+'-'+rk.rack+'-'+lv.level;
       var lines=lv.items.length?lv.items:[null];
       var filled=lv.items.some(function(it){return it.part});
-      h+='<div class="level'+(filled?'':' empty')+'"><div class="addr"><span class="tagl">'+esc(addr)+'</span><span class="ht">'+esc(lv.height)+' in</span></div><div class="lines">';
+      h+='<div class="level'+(filled?'':' empty')+'"><div class="addr"><span class="tagl">'+esc(addr)+'</span>'+(lv.height!==''&&lv.height!=null?'<span class="ht">'+esc(lv.height)+' in</span>':'')+'</div><div class="lines">';
       lines.forEach(function(it,i){
         var id=addr+'-'+(it?i:'new');
         var d='data-r="'+ri+'" data-k="'+ki+'" data-l="'+li+'" data-i="'+(it?i:'new')+'"';
@@ -201,12 +212,15 @@ function master(T){
   });
   h+='</tbody><tfoot><tr><td colspan="6">All parts</td><td class="r total num">'+fmt(grand)+'</td><td class="r num">'+T.filled+'</td><td colspan="'+(canEdit()?2:1)+'"></td></tr></tfoot></table></div>'+
      (canEdit()?'<div class="tablefoot"><button class="btn" data-act="addpart">+ Add part</button></div>':'')+'</div>';
-  h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th>Part ID</th>';
-  state.rows.forEach(function(r){h+='<th class="r">Row '+esc(r.row)+'</th>'});
-  h+='<th class="r">Total</th></tr></thead><tbody>';
+  var secs=state.sections.filter(function(s){return s.rows.length});
+  h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th rowspan="2">Part ID</th>';
+  secs.forEach(function(s){h+='<th class="sec" colspan="'+s.rows.length+'">'+esc(s.name)+'</th>'});
+  h+='<th class="r" rowspan="2">Total</th></tr><tr>';
+  secs.forEach(function(s){s.rows.forEach(function(r){h+='<th class="r">Row '+esc(r.row)+'</th>'})});
+  h+='</tr></thead><tbody>';
   state.parts.forEach(function(p){
     h+='<tr><td>'+esc(partName(p))+'</td>';
-    state.rows.forEach(function(r){var v=T.byRow[r.row][p.k];h+='<td class="r num'+(v?'':' zero')+'">'+(v?fmt(v):'–')+'</td>'});
+    secs.forEach(function(s){s.rows.forEach(function(r){var v=T.byRow[rowKey(s,r)][p.k];h+='<td class="r num'+(v?'':' zero')+'">'+(v?fmt(v):'–')+'</td>'})});
     h+='<td class="r num"><b>'+fmt(T.t[p.k]||0)+'</b></td></tr>';
   });
   h+='</tbody></table></div></div></div>';
@@ -267,10 +281,10 @@ function adminDo(p,okMsg){
 function save(){
   if(!dirty||saving||!canEdit())return;
   saving=true;saveErr='';renderStatus();
-  api('PUT','/api/data',{baseVersion:server.version,parts:state.parts,rows:state.rows})
+  api('PUT','/api/data',{baseVersion:server.version,parts:state.parts,sections:state.sections})
     .then(function(j){
       saving=false;dirty=false;
-      server={version:j.version,savedAt:j.savedAt,savedBy:j.savedBy,parts:clone(state.parts),rows:clone(state.rows)};
+      server={version:j.version,savedAt:j.savedAt,savedBy:j.savedBy,parts:clone(state.parts),sections:clone(state.sections)};
       store('wmr-draft:'+me.id);renderStatus();
     })
     .catch(function(x){
@@ -281,7 +295,7 @@ function save(){
 }
 function reloadLatest(){
   api('GET','/api/data').then(function(d){
-    server=d;state=clone({parts:d.parts,rows:d.rows});dirty=false;newer=null;saveErr='';store('wmr-draft:'+me.id);render();
+    server=d;state=clone({parts:d.parts,sections:d.sections});dirty=false;newer=null;saveErr='';store('wmr-draft:'+me.id);render();
   }).catch(function(){});
 }
 setInterval(function(){
@@ -296,7 +310,7 @@ function isTyping(){var a=document.activeElement;return a&&(a.tagName==='INPUT'|
 window.addEventListener('beforeunload',function(e){if(dirty&&!saving){e.preventDefault();e.returnValue=''}});
 
 /* ---------- events ---------- */
-function lvOf(t){return state.rows[+t.dataset.r].racks[+t.dataset.k].levels[+t.dataset.l]}
+function lvOf(t){return rows()[+t.dataset.r].racks[+t.dataset.k].levels[+t.dataset.l]}
 
 root.addEventListener('click',function(e){
   var t=e.target.closest('[data-act]');if(!t||!me)return;var a=t.dataset.act;
@@ -304,30 +318,31 @@ root.addEventListener('click',function(e){
   if(a!=='delrow'&&a!=='delpart'&&ui.armed){ui.armed=null;if(a!=='tab'&&a!=='row')render()}
   if(a!=='deluser'&&admin.armed){admin.armed=null}
   if(a==='tab'){ui.tab=t.dataset.v;ui.armed=null;saveUi();render();refocus('tab-'+ui.tab);if(ui.tab==='admin')loadAdmin()}
-  else if(a==='row'){ui.row=+t.dataset.v;saveUi();render()}
+  else if(a==='row'){var rw=rows()[+t.dataset.v];if(rw)ui.rows[ui.tab]=rw.row;saveUi();render()}
   else if(a==='logout'){api('POST','/api/logout',{}).finally(function(){me=null;showLogin('')})}
   else if(a==='account'){ui.account=!ui.account;render();if(ui.account)refocus('acc-cur')}
   else if(a==='reload')reloadLatest();
   else if(a==='save')save();
-  else if(a==='revert'){state=clone({parts:server.parts,rows:server.rows});dirty=false;saveErr='';store('wmr-draft:'+me.id);render()}
+  else if(a==='revert'){state=clone({parts:server.parts,sections:server.sections});dirty=false;saveErr='';store('wmr-draft:'+me.id);render()}
   else if(!canEdit()&&['addrow','delrow','rmline','addpart','delpart'].indexOf(a)>=0)return;
   else if(a==='addrow'){
-    var last=state.rows[state.rows.length-1];
-    var n=state.rows.reduce(function(m,r){return Math.max(m,num(r.row))},0)+1;
+    var R=rows(),last=R[R.length-1],n;
+    if(last&&typeof last.row==='string'&&/^[A-Z]$/.test(last.row))n=last.row==='Z'?'AA':String.fromCharCode(last.row.charCodeAt(0)+1); // lettered rows continue A, B, C…
+    else n=R.reduce(function(m,r){return Math.max(m,num(r.row))},0)+1;
     var racks=last?last.racks.map(function(rk){return {rack:rk.rack,label:rk.label,levels:rk.levels.map(function(lv){return {level:lv.level,height:lv.height,items:[]}})}})
       :[1,2].map(function(k){return {rack:k,label:'12 ft',levels:[9,8,7,6,5,4,3,2,1].map(function(l){return {level:l,height:17,items:[]}})}});
-    state.rows.push({row:n,racks:racks});ui.row=n;saveUi();changed();render();
+    R.push({row:n,racks:racks});ui.rows[ui.tab]=n;saveUi();changed();render();
   }
   else if(a==='delrow'){
     if(ui.armed!=='row'){ui.armed='row';render();return}
-    state.rows=state.rows.filter(function(r){return r.row!==ui.row});ui.armed=null;ui.row=state.rows.length?state.rows[0].row:null;saveUi();changed();render();
+    var S=sec();S.rows=S.rows.filter(function(r){return !sameRow(r.row,ui.rows[S.key])});ui.armed=null;ui.rows[S.key]=S.rows.length?S.rows[0].row:null;saveUi();changed();render();
   }
   else if(a==='rmline'){lvOf(t).items.splice(+t.dataset.i,1);changed();render()}
   else if(a==='addpart'){var p={k:uid(),number:'',description:'',partId:'',qtyPerPallet:'',dedicatedCase:'',qtyPerCase:''};state.parts.push(p);changed();render();refocus('number-'+p.k)}
   else if(a==='delpart'){
     var k=t.dataset.p;if(ui.armed!==k){ui.armed=k;render();return}
     state.parts=state.parts.filter(function(p){return p.k!==k});
-    state.rows.forEach(function(r){r.racks.forEach(function(rk){rk.levels.forEach(function(lv){lv.items=lv.items.filter(function(it){return it.part!==k})})})});
+    eachLevel(function(lv){lv.items=lv.items.filter(function(it){return it.part!==k})});
     ui.armed=null;changed();render();
   }
   /* admin actions */
@@ -359,7 +374,7 @@ root.addEventListener('change',function(e){
   if(t.dataset.i==='new'){if(!v)return;lv.items.push({part:v,qty:p&&p.qtyPerPallet!==''?num(p.qtyPerPallet):''})}
   else{var it=lv.items[+t.dataset.i];it.part=v;if(v&&(it.qty===''||it.qty==null)&&p&&p.qtyPerPallet!=='')it.qty=num(p.qtyPerPallet)}
   changed();render();
-  var r=state.rows[+t.dataset.r],rk=r.racks[+t.dataset.k],i=t.dataset.i==='new'?lv.items.length-1:t.dataset.i;
+  var r=rows()[+t.dataset.r],rk=r.racks[+t.dataset.k],i=t.dataset.i==='new'?lv.items.length-1:t.dataset.i;
   refocus('qty-'+r.row+'-'+rk.rack+'-'+lv.level+'-'+i);
 });
 

@@ -22,6 +22,6 @@ http.createServer((req, res) => {
   res.writeHead(200, Object.assign({ 'Content-Type': hit[1] }, HEADERS));
   res.end(fs.readFileSync(path.join(PUBLIC_DIR, hit[0])));
 }).listen(PORT, async () => {
-  console.log('Waxahachie Metal Racking running on http://localhost:' + PORT + ' (storage: ' + api.store.kind + ')');
+  console.log('Americase Visual Inventory running on http://localhost:' + PORT + ' (storage: ' + api.store.kind + ')');
   try { await api.getUsers(); } catch (e) { console.error(e.message); }
 });

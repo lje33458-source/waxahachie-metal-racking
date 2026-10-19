@@ -1,9 +1,9 @@
-# Waxahachie Metal Racking
+# Americase Visual Inventory
 
-A shared web app for HQ metal racking. People sign in with a **User ID + passkey**, assign Part IDs and quantities to rack addresses, and keep the Metal Master list. Admins manage users from the **Admin** tab.
+A shared web app for Americase racking. People sign in with a **User ID + passkey**, assign Part IDs and quantities to rack addresses, and keep the Metal Master list. Admins manage users from the **Admin** tab.
 
-- **Racking**: pick a row, then set the Part ID and quantity at each address (`row-rack-level`).
-- **Master**: the parts list, with total quantity, locations and pallets for each part, plus a part-by-row breakdown.
+- **HQ Metal Racking**, **Challenger Racking**, **HQ PF1 Racking**: one tab per racking area. Pick a row, then set the Part ID and quantity at each address (`row-rack-level`). A rack that is missing a level shows a "No slot" gap there.
+- **Master**: the parts list, with total quantity, locations and pallets for each part across all areas, plus a part-by-row breakdown.
 - **Admin** (admins only): add users, set roles, reset passkeys, disable or delete accounts, and see an activity log of sign-ins, saves and user changes.
 
 Roles:
