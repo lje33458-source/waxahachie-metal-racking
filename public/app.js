@@ -7,6 +7,7 @@ var state=null;         // working copy being edited
 var dirty=false,saving=false,newer=null,saveErr='';
 var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master', 'transfer', 'machines' or 'admin'; rows holds the picked row per section
 var MACHINES=['EMK','EMLK','P4','L5'];
+var recv=null; // set at start (needs today())
 var mach={ret:null,used:'',busy:false,msg:'',err:''}; // ret is the machine being returned to the rack
 var tlog={range:'today',entries:null,err:''},mlog={range:'today',machine:'all',entries:null,err:''};
 var xfer={part:'',qty:'',picks:[],machine:null,busy:false,msg:'',err:''}; // picks holds the chosen pallets' keys, in pick order
@@ -65,11 +66,12 @@ document.addEventListener('submit',function(e){
 });
 
 function start(){
+  recv=blankRecv();
   return api('GET','/api/data').then(function(d){
     server=d;state=clone({parts:d.parts,sections:d.sections});dirty=false;newer=null;saveErr='';
     var pref=load('wmr-ui:'+me.id)||{};
     ui.tab=pref.tab||'hq';if(ui.tab==='racking')ui.tab='hq';
-    if((ui.tab==='admin'&&!isAdmin())||(['admin','master','transfer','machines'].indexOf(ui.tab)<0&&!sec()))ui.tab='hq';
+    if((ui.tab==='admin'&&!isAdmin())||(['admin','master','transfer','machines','receive'].indexOf(ui.tab)<0&&!sec()))ui.tab='hq';
     ui.rows=pref.rows||{};if(pref.row!=null&&ui.rows.hq==null)ui.rows.hq=pref.row;
     if(location.hash==='#master')ui.tab='master';
     var draft=load('wmr-draft:'+me.id);
@@ -116,9 +118,9 @@ function render(){
       (dirty?'Your unsaved changes were made on the older version. Load the latest to continue; your edits will be discarded.':'')+'</span>'+
       '<button class="btn" data-act="reload">Load latest</button></div>':'')+
     '<nav class="tabs" role="tablist">'+
-      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('transfer','Transfer Material')+tab('machines','Machine')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
+      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('receive','Receive Material')+tab('transfer','Transfer Material')+tab('machines','Machine')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
     '</nav>'+
-    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T)+(isAdmin()?palletSheet():''))+'</section>';
+    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='receive'?receiveView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T)+(isAdmin()?palletSheet():''))+'</section>';
   renderStatus();
 }
 function tab(v,label){return '<button class="tab" role="tab" id="tab-'+v+'" aria-selected="'+(ui.tab===v)+'" data-act="tab" data-v="'+v+'">'+label+'</button>'}
@@ -337,10 +339,10 @@ function sheet(o){
     });
     h+='</tbody></table></div>';
   })});
-  h+='</div><table class="sheet-list"><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th>Routing #</th><th>Received</th><th class="r">Quantity</th><th>Machine</th><th>Done</th></tr></thead><tbody>';
+  h+='</div><table class="sheet-list"><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th>Routing #</th><th>Received</th><th class="r">Quantity</th>'+(o.noMachine?'':'<th>Machine</th>')+'<th>Done</th></tr></thead><tbody>';
   if(!o.items.length)h+='<tr><td colspan="8">Nothing goes back to the racking.</td></tr>';
-  o.items.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(x.pn)+'</td><td>'+esc(x.routing)+'</td><td>'+esc(day(x.received))+'</td><td class="r">'+fmt(x.qty)+'</td><td>'+esc(o.machine)+'</td><td><span class="box"></span></td></tr>'});
-  h+='</tbody><tfoot><tr><td colspan="5">'+esc(o.foot)+'</td><td class="r">'+fmt(o.footQty)+'</td><td>'+esc(o.machine)+'</td><td></td></tr></tfoot></table></div>';
+  o.items.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(x.pn)+'</td><td>'+esc(x.routing)+'</td><td>'+esc(day(x.received))+'</td><td class="r">'+fmt(x.qty)+'</td>'+(o.noMachine?'':'<td>'+esc(o.machine)+'</td>')+'<td><span class="box"></span></td></tr>'});
+  h+='</tbody><tfoot><tr><td colspan="5">'+esc(o.foot)+'</td><td class="r">'+fmt(o.footQty)+'</td>'+(o.noMachine?'':'<td>'+esc(o.machine)+'</td>')+'<td></td></tr></tfoot></table></div>';
   return h;
 }
 function pickSheet(p,q,P){
@@ -364,11 +366,105 @@ function doTransfer(){
   api('POST','/api/transfer',{part:xfer.part,requested:q,machine:m,pallets:P.list.map(function(x){return {section:x.section,row:x.row,rack:x.rack,level:x.level,item:x.item,qty:x.qty}})})
     .then(function(d){
       server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
-      xfer={part:xfer.part,qty:'',picks:[],machine:null,busy:false,err:'',msg:'Moved '+P.list.length+' pallet'+(P.list.length>1?'s':'')+' ('+fmt(P.total)+' × '+name+') from '+P.list.map(function(x){return x.loc}).join(', ')+' to '+m+'.'};
+      xfer={part:'',qty:'',picks:[],machine:null,busy:false,err:'',msg:'Moved '+P.list.length+' pallet'+(P.list.length>1?'s':'')+' ('+fmt(P.total)+' × '+name+') from '+P.list.map(function(x){return x.loc}).join(', ')+' to '+m+'.'};
       render();loadLog();
     })
     .catch(function(x){xfer.busy=false;if(x.silent)return;xfer.err=x.message;reloadLatest()});
 }
+/* ---------- receive material ---------- */
+// New pallets coming in: pick the material, how many pallets and what is on each, then an open spot on the racking for each one.
+function blankRecv(){return {part:'',count:'',qtys:[],routings:[],date:today(),spots:[],busy:false,msg:'',err:''}}
+function recvCount(){var n=Number(recv.count);return recv.count!==''&&Number.isInteger(n)&&n>0&&n<=50?n:0}
+function spotKey(s,r,rk,lv){return s.key+'|'+r.row+'|'+rk.rack+'|'+lv.level}
+// Spots chosen that are still open, in the order they were chosen.
+function recvSpots(){
+  var open={};
+  state.sections.forEach(function(s){s.rows.forEach(function(r){r.racks.forEach(function(rk){rk.levels.forEach(function(lv){
+    if(!lv.items.length)open[spotKey(s,r,rk,lv)]={section:s.key,row:r.row,rack:rk.rack,level:lv.level,addr:r.row+'-'+rk.rack+'-'+lv.level,loc:(state.sections.length>1?s.name+' ':'')+r.row+'-'+rk.rack+'-'+lv.level};
+  })})})});
+  recv.spots=recv.spots.filter(function(k){return open[k]}).slice(0,recvCount());
+  return recv.spots.map(function(k){return open[k]});
+}
+function recvQty(i){var v=recv.qtys[i];var n=Number(v);return v!==''&&v!=null&&isFinite(n)&&n>0?n:0}
+function receiveView(){
+  var h='<div class="stack"><div class="panel"><div class="panel-h"><h3>Receive Material</h3><p>Pick the material, how many pallets came in and the quantity on each, then an open spot on the racking for each pallet.</p></div>';
+  h+='<div class="formrow"><div class="field grow"><label for="rv-part">Material type</label><select id="rv-part" data-act="rpart"><option value="">Select part number</option>';
+  state.parts.forEach(function(p){h+='<option value="'+esc(p.k)+'"'+(recv.part===p.k?' selected':'')+'>'+esc(partName(p))+'</option>'});
+  h+='</select></div><div class="field"><label for="rv-count">Pallets received</label><input id="rv-count" class="num" type="number" inputmode="numeric" min="1" max="50" step="1" data-act="rcount" value="'+esc(recv.count)+'"></div>'+
+    '<div class="field"><label for="rv-date">Date received</label><input id="rv-date" type="date" data-act="rdate" value="'+esc(recv.date)+'"></div></div>';
+  if(recv.msg)h+='<p class="ok-msg" role="status" style="padding:0 14px 12px">'+esc(recv.msg)+'</p>';
+  h+='<div id="rv-qtys">'+recvQtys()+'</div></div><div id="rv-body" class="stack">'+recvBody()+'</div></div>';
+  return h;
+}
+function recvQtys(){
+  var n=recvCount(),p=part(recv.part);
+  if(!p||!n)return '';
+  var h='<div class="scroll"><table class="rvq"><thead><tr><th>Pallet</th><th class="r" style="width:140px">Quantity on pallet</th><th style="width:200px">Routing #</th></tr></thead><tbody>';
+  for(var i=0;i<n;i++){
+    if(recv.qtys[i]==null)recv.qtys[i]=p.qtyPerPallet!==''&&p.qtyPerPallet!=null?String(p.qtyPerPallet):'';
+    h+='<tr><td>Pallet '+(i+1)+'</td><td><input id="rv-q-'+i+'" class="num" type="number" inputmode="numeric" min="1" step="1" data-act="rqty" data-i="'+i+'" value="'+esc(recv.qtys[i])+'" aria-label="Quantity on pallet '+(i+1)+'"></td>'+
+      '<td><input id="rv-rt-'+i+'" data-act="rrt" data-i="'+i+'" value="'+esc(recv.routings[i]||'')+'" aria-label="Routing number for pallet '+(i+1)+'" placeholder="Optional"></td></tr>';
+  }
+  return h+'</tbody></table></div>';
+}
+function recvBody(){
+  var n=recvCount(),p=part(recv.part);
+  if(!p)return '<p class="empty-note">Select a material type to start.</p>';
+  if(!n)return '<p class="empty-note">Enter how many pallets were received (up to 50).</p>';
+  var S=recvSpots(),idx={};S.forEach(function(x,i){idx[x.section+'|'+x.row+'|'+x.rack+'|'+x.level]=i+1});
+  var h='<div class="tally'+(S.length===n?' ok':'')+'"><span class="label">Open spots chosen</span><b class="num">'+S.length+' / '+n+'</b><span class="dim">'+(S.length===n?'Every pallet has a spot.':'Click an open spot for pallet '+(S.length+1)+'.')+'</span></div>';
+  h+='<div class="panel"><div class="panel-h"><h3>Open spots on the racking</h3><p>Open spots are white. Click one for each pallet, in order; click it again to clear it.</p></div><div class="spotmaps">';
+  var anyOpen=false;
+  state.sections.forEach(function(s){s.rows.forEach(function(r){
+    var all={};r.racks.forEach(function(rk){rk.levels.forEach(function(lv){all[lv.level]=1})});
+    var lvls=Object.keys(all).map(Number).sort(function(a,b){return b-a});
+    h+='<div class="spotmap"><div class="sheet-row-h">'+(state.sections.length>1?esc(s.name)+' · ':'')+'Row '+esc(r.row)+'</div><table><thead><tr><th></th>'+r.racks.map(function(rk){return '<th>Rack '+esc(rk.rack)+'</th>'}).join('')+'</tr></thead><tbody>';
+    lvls.forEach(function(L){
+      h+='<tr><th>L'+L+'</th>';
+      r.racks.forEach(function(rk){
+        var lv=rk.levels.filter(function(x){return x.level===L})[0];
+        if(!lv){h+='<td class="none"></td>';return}
+        var addr=r.row+'-'+rk.rack+'-'+L,k=spotKey(s,r,rk,lv),i=idx[s.key+'|'+r.row+'|'+rk.rack+'|'+L];
+        if(lv.items.length){var q=part(lv.items[0].part);h+='<td class="full" title="'+esc(q?partName(q):'')+'">'+esc(addr)+'</td>';return}
+        anyOpen=true;
+        var can=i||S.length<n;
+        h+='<td class="open'+(i?' hit':'')+'"><button data-act="rspot" data-v="'+esc(k)+'"'+(can?'':' disabled')+' aria-pressed="'+!!i+'">'+(i?'<b>'+i+'</b> ':'')+esc(addr)+'</button></td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+  })});
+  h+='</div>'+(anyOpen?'':'<p class="empty-note">There are no open spots on the racking.</p>')+'</div>';
+  var qOk=true;for(var i=0;i<n;i++)if(!recvQty(i))qOk=false;
+  if(recv.err)h+='<p class="err" role="alert">'+esc(recv.err)+'</p>';
+  if(S.length<n)return h;
+  if(!qOk)return h+'<p class="err">Enter the quantity on every pallet.</p>';
+  var total=0,items=S.map(function(x,i){total+=recvQty(i);return {section:x.section,row:x.row,addr:x.addr,loc:x.loc,pn:partName(p),qty:recvQty(i),routing:recv.routings[i]||'',received:recv.date}});
+  h+='<div class="panel"><div class="panel-h"><h3>Put away</h3><p>'+n+' pallet'+(n>1?'s':'')+' · '+fmt(total)+' × '+esc(partName(p))+'</p></div><div class="tablefoot">';
+  if(!canEdit())h+='<p class="dim">Your account can view but not receive material.</p>';
+  else if(dirty)h+='<p class="err">Save or undo your racking changes before receiving material.</p>';
+  else h+='<button class="btn primary" data-act="rgo"'+(recv.busy?' disabled':'')+'>'+(recv.busy?'Receiving…':'Receive '+n+' pallet'+(n>1?'s':'')+' onto the racking')+'</button>';
+  h+='</div></div>';
+  h+='<div class="panel"><div class="panel-h"><h3>Ready for print</h3><p>Put-away sheet: take each pallet to the spot marked. It fits on one 8.5 × 11 in page.</p><button class="btn" data-act="xprint">Print</button></div><div class="sheet-wrap">'+
+    sheet({title:'Receive material',dir:'To',machine:'Racking',noMachine:true,sub:'<b>'+esc(partName(p))+'</b>'+(p.description?' · '+esc(p.description):'')+' · received '+esc(day(recv.date)),items:items,foot:n+' pallet'+(n>1?'s':'')+' received',footQty:total})+'</div></div>';
+  return h;
+}
+function refreshRecv(qtys){if(qtys){var q=document.getElementById('rv-qtys');if(q)q.innerHTML=recvQtys()}var el=document.getElementById('rv-body');if(el)el.innerHTML=recvBody()}
+function doReceive(){
+  var n=recvCount(),S=recvSpots();
+  if(!n||S.length<n||recv.busy||dirty||!canEdit())return;
+  for(var i=0;i<n;i++)if(!recvQty(i))return;
+  recv.busy=true;recv.err='';refreshRecv();
+  var name=partName(part(recv.part)||{});
+  api('POST','/api/receive',{part:recv.part,received:recv.date,pallets:S.map(function(x,i){return {section:x.section,row:x.row,rack:x.rack,level:x.level,qty:recvQty(i),routing:recv.routings[i]||''}})})
+    .then(function(d){
+      server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
+      recv=blankRecv();recv.msg='Received '+n+' pallet'+(n>1?'s':'')+' of '+name+' into '+S.map(function(x){return x.loc}).join(', ')+'.';
+      render();loadLog();
+    })
+    .catch(function(x){recv.busy=false;if(x.silent)return;recv.err=x.message;reloadLatest()});
+}
+
 /* ---------- machines ---------- */
 function atMachine(m){return ((server.machines||{})[m])||[]}
 function secName(k){var s=sec(k);return s?s.name:k}
@@ -397,7 +493,7 @@ function machinesView(){
     if(!list.length)h+='<p class="dim">No material at this machine.</p>';
     list.forEach(function(x){var p=part(x.part),f=fromLoc(x);
       h+='<div class="mpal" title="Pallet from '+esc(f.loc)+'"><div class="load"><b class="pn">'+esc(p?partName(p):'Removed part')+'</b><span class="tagl inline">'+esc(f.loc)+'</span>'+
-        '<span class="q num">'+fmt(num(x.qty))+' <small>/ '+(x.requested?fmt(num(x.requested)):'–')+'</small></span><small class="lbl">pallet qty / requested</small><small class="lbl">Received '+esc(day(x.received))+'</small></div>'+
+        '<span class="q num">'+fmt(num(x.qty))+' <small>/ '+(x.requested?fmt(num(x.requested)):'–')+'</small></span><small class="lbl">pallet qty / requested</small></div>'+
         '<div class="deck" aria-hidden="true"><i></i><i></i><i></i></div></div>'});
     h+='</div></div>';
   });
@@ -475,11 +571,16 @@ function logPanel(id){
   h+='</div>';
   if(L.byMachine){h+='<div class="chips">';['all'].concat(MACHINES).forEach(function(m){h+='<button class="chip sm" data-act="lmach" data-log="'+id+'" data-v="'+m+'" aria-pressed="'+(st.machine===m)+'">'+(m==='all'?'All machines':m)+'</button>'});h+='</div>'}
   h+='</div></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Part Number</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
-  var list=(st.entries||[]).filter(function(e){return e.machine&&(!L.byMachine||st.machine==='all'||e.machine===st.machine)});
+  var list=(st.entries||[]).filter(function(e){return L.byMachine?(st.machine==='all'||e.machine===st.machine):!!e.machine});
   if(st.err)h+='<tr><td colspan="7" class="err">'+esc(st.err)+'</td></tr>';
   else if(!st.entries)h+='<tr><td colspan="7" class="empty-note">Loading…</td></tr>';
   else if(!list.length)h+='<tr><td colspan="7" class="empty-note">Nothing in this period.</td></tr>';
   list.forEach(function(e){
+    if(e.kind==='receive'){
+      h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>Received · '+(e.pallets||[]).length+' pallet'+((e.pallets||[]).length===1?'':'s')+'</td><td>'+esc(e.partNumber||e.part)+'</td><td class="r num">'+fmt(e.qty)+'</td>'+
+        '<td class="detail"><b>Receiving</b></td><td class="detail">'+esc((e.pallets||[]).map(function(x){return x.loc+' ('+fmt(x.qty)+')'}).join(', '))+'</td></tr>';
+      return;
+    }
     var ret=e.kind==='return',pals=Array.isArray(e.pallets)?e.pallets:[];
     var pns={};if(ret)pals.forEach(function(x){pns[x.partNumber||x.part]=1});else pns[e.partNumber||e.part]=1;
     var locs=pals.filter(function(x){return !ret||x.qty}).map(function(x){return x.loc+(ret?' ('+fmt(x.qty)+')':'')}).join(', ')||(ret?'Nothing left over':'');
@@ -661,6 +762,8 @@ root.addEventListener('click',function(e){
   else if(a==='xgo')doTransfer();
   else if(a==='mret'){if(mach.ret===t.dataset.v)mach.ret=null;else{mach.ret=t.dataset.v;mach.used=String(requestedAt(mach.ret))}mach.err='';mach.msg='';render()}
   else if(a==='mgo')doReturn();
+  else if(a==='rspot'){var si=recv.spots.indexOf(t.dataset.v);if(si>=0)recv.spots.splice(si,1);else if(recv.spots.length<recvCount())recv.spots.push(t.dataset.v);recv.err='';recv.msg='';refreshRecv()}
+  else if(a==='rgo')doReceive();
   else if(a==='lrange'){var lst=LOGS[t.dataset.log].st;lst.range=t.dataset.v;lst.entries=null;var el=document.getElementById(t.dataset.log);if(el)el.outerHTML=logPanel(t.dataset.log);loadLog(t.dataset.log)}
   else if(a==='lmach'){LOGS[t.dataset.log].st.machine=t.dataset.v;var el2=document.getElementById(t.dataset.log);if(el2)el2.outerHTML=logPanel(t.dataset.log)}
   else if(a==='ptdel'&&isAdmin()){var S2=sec(t.dataset.s);S2.rows[+t.dataset.r].racks[+t.dataset.k].levels[+t.dataset.l].items.splice(+t.dataset.i,1);changed();render()}
@@ -677,6 +780,7 @@ root.addEventListener('click',function(e){
 
 root.addEventListener('change',function(e){
   var t=e.target;
+  if(t.dataset.act==='rpart'){recv.part=t.value;recv.qtys=[];recv.err='';recv.msg='';refreshRecv(true);return}
   if(t.dataset.act==='xpart'){xfer.part=t.value;xfer.picks=[];xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer();return}
   if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+t.value+'.');return}
   if(t.dataset.act!=='part'||!canEdit())return;
@@ -691,6 +795,10 @@ root.addEventListener('change',function(e){
 root.addEventListener('input',function(e){
   var t=e.target,a=t.dataset.act;
   if(a==='xqty'){xfer.qty=t.value;xfer.err='';xfer.msg='';refreshTransfer();return}
+  if(a==='rcount'){recv.count=t.value;recv.err='';refreshRecv(true);return}
+  if(a==='rqty'){recv.qtys[+t.dataset.i]=t.value;refreshRecv();return}
+  if(a==='rrt'){recv.routings[+t.dataset.i]=t.value;refreshRecv();return}
+  if(a==='rdate'){recv.date=t.value||today();refreshRecv();return}
   if(a==='mused'){mach.used=t.value;mach.err='';refreshReturn();return}
   if(!canEdit())return;
   if(a==='qty'){
