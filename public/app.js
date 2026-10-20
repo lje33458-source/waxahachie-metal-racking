@@ -5,7 +5,9 @@ var me=null;            // {id, role}
 var server=null;        // last data loaded/saved from the server
 var state=null;         // working copy being edited
 var dirty=false,saving=false,newer=null,saveErr='';
-var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master' or 'admin'; rows holds the picked row per section
+var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master', 'transfer', 'machines' or 'admin'; rows holds the picked row per section
+var MACHINES=['EMK','EMLK','P4','L5'];
+var xfer={part:'',qty:'',pick:null,machine:null,busy:false,msg:'',err:''}; // pick is the chosen pallet's key
 var admin={users:[],log:[],msg:'',err:'',created:null,resetFor:null,armed:null};
 
 /* ---------- helpers ---------- */
@@ -65,7 +67,7 @@ function start(){
     server=d;state=clone({parts:d.parts,sections:d.sections});dirty=false;newer=null;saveErr='';
     var pref=load('wmr-ui:'+me.id)||{};
     ui.tab=pref.tab||'hq';if(ui.tab==='racking')ui.tab='hq';
-    if((ui.tab==='admin'&&!isAdmin())||(ui.tab!=='admin'&&ui.tab!=='master'&&!sec()))ui.tab='hq';
+    if((ui.tab==='admin'&&!isAdmin())||(['admin','master','transfer','machines'].indexOf(ui.tab)<0&&!sec()))ui.tab='hq';
     ui.rows=pref.rows||{};if(pref.row!=null&&ui.rows.hq==null)ui.rows.hq=pref.row;
     if(location.hash==='#master')ui.tab='master';
     var draft=load('wmr-draft:'+me.id);
@@ -111,9 +113,9 @@ function render(){
       (dirty?'Your unsaved changes were made on the older version. Load the latest to continue; your edits will be discarded.':'')+'</span>'+
       '<button class="btn" data-act="reload">Load latest</button></div>':'')+
     '<nav class="tabs" role="tablist">'+
-      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
+      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('master','Master')+tab('transfer','Transfer Material')+tab('machines','Machine Material')+(isAdmin()?tab('admin','Admin'):'')+
     '</nav>'+
-    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='admin'?adminView():racking(T))+'</section>';
+    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T))+'</section>';
   renderStatus();
 }
 function tab(v,label){return '<button class="tab" role="tab" id="tab-'+v+'" aria-selected="'+(ui.tab===v)+'" data-act="tab" data-v="'+v+'">'+label+'</button>'}
@@ -228,13 +230,101 @@ function master(T){
   return h;
 }
 
+/* ---------- material transfer ---------- */
+// Every pallet on the racking holding the chosen material, in racking order.
+function pallets(k){
+  var out=[],multi=state.sections.length>1;
+  state.sections.forEach(function(s){s.rows.forEach(function(r){r.racks.forEach(function(rk){rk.levels.forEach(function(lv){
+    lv.items.forEach(function(it,i){
+      if(it.part!==k)return;
+      var loc=r.row+'-'+rk.rack+'-'+lv.level;
+      out.push({key:s.key+'|'+loc+'|'+i,section:s.key,row:r.row,rack:rk.rack,level:lv.level,qty:num(it.qty),loc:(multi?s.name+' ':'')+loc});
+    });
+  })})})});
+  return out;
+}
+function xferQty(){var n=Number(xfer.qty);return xfer.qty!==''&&Number.isInteger(n)&&n>0?n:0}
+function transferView(){
+  var h='<div class="stack"><div class="panel"><div class="panel-h"><h3>Transfer material</h3><p>Pick the material and quantity, choose a green pallet, then the machine it goes to.</p></div>';
+  h+='<div class="formrow"><div class="field grow"><label for="xf-part">Material type</label><select id="xf-part" data-act="xpart"><option value="">Select material type</option>';
+  state.parts.forEach(function(p){h+='<option value="'+esc(p.k)+'"'+(xfer.part===p.k?' selected':'')+'>'+esc(partName(p))+'</option>'});
+  h+='</select></div><div class="field"><label for="xf-qty">Quantity requested</label><input id="xf-qty" class="num" type="number" inputmode="numeric" min="1" step="1" data-act="xqty" value="'+esc(xfer.qty)+'"></div></div>';
+  h+='</div><div id="xf-results" class="stack">'+transferResults()+'</div></div>';
+  return h;
+}
+function transferResults(){
+  return (xfer.msg?'<p class="ok-msg" role="status">'+esc(xfer.msg)+'</p>':'')+transferTable();
+}
+function transferTable(){
+  if(!xfer.part||!part(xfer.part))return '<p class="empty-note">Select a material type to see where it is racked.</p>';
+  var q=xferQty(),list=pallets(xfer.part),p=part(xfer.part);
+  if(!list.some(function(x){return x.key===xfer.pick&&q&&x.qty>=q})){xfer.pick=null;xfer.machine=null}
+  var h='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets have at least '+fmt(q)+'. Only green pallets can be picked.':'Enter the quantity requested to see which pallets can fill it.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Material type</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
+  if(!list.length)h+='<tr><td colspan="4" class="empty-note">No pallets of this material are on the racking.</td></tr>';
+  list.forEach(function(x){
+    var ok=q&&x.qty>=q,sel=x.key===xfer.pick,cls=q?(ok?'go':'no'):'';
+    h+='<tr class="'+cls+(sel?' picked':'')+'"'+(ok?' data-act="xpick" data-v="'+esc(x.key)+'"':'')+'><td>'+
+      (ok?'<button class="pick" aria-pressed="'+sel+'" aria-label="Pick '+esc(x.loc)+'"></button>':'')+'</td>'+
+      '<td>'+esc(partName(p))+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td class="r num"><b>'+fmt(x.qty)+'</b></td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  if(xfer.err)h+='<p class="err" role="alert">'+esc(xfer.err)+'</p>';
+  if(!xfer.pick)return h;
+  var pk=list.filter(function(x){return x.key===xfer.pick})[0];
+  h+='<div class="panel"><div class="panel-h"><h3>Send to machine</h3><p>Pallet '+esc(pk.loc)+' · '+fmt(q)+' × '+esc(partName(p))+'</p></div><div class="machines">';
+  MACHINES.forEach(function(m){h+='<button class="machine" data-act="xmachine" data-v="'+m+'" aria-pressed="'+(xfer.machine===m)+'">'+m+'</button>'});
+  h+='</div><div class="tablefoot">';
+  if(!canEdit())h+='<p class="dim">Your account can view but not transfer material.</p>';
+  else if(dirty)h+='<p class="err">Save or undo your racking changes before transferring.</p>';
+  else h+='<button class="btn primary" data-act="xgo"'+(!xfer.machine||xfer.busy?' disabled':'')+'>'+(xfer.busy?'Transferring…':xfer.machine?'Transfer '+fmt(q)+' to '+xfer.machine:'Choose a machine')+'</button>';
+  return h+'</div></div>';
+}
+function refreshTransfer(){var el=document.getElementById('xf-results');if(el)el.innerHTML=transferResults()}
+function doTransfer(){
+  var q=xferQty(),pk=pallets(xfer.part).filter(function(x){return x.key===xfer.pick})[0];
+  if(!pk||!q||!xfer.machine||xfer.busy||dirty||!canEdit())return;
+  xfer.busy=true;xfer.err='';xfer.msg='';refreshTransfer();
+  var m=xfer.machine;
+  api('POST','/api/transfer',{part:xfer.part,qty:q,machine:m,section:pk.section,row:pk.row,rack:pk.rack,level:pk.level})
+    .then(function(d){
+      server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
+      xfer={part:xfer.part,qty:'',pick:null,machine:null,busy:false,err:'',msg:'Moved '+fmt(q)+' × '+partName(part(xfer.part)||{})+' from '+pk.loc+' to '+m+'.'};
+      render();
+    })
+    .catch(function(x){xfer.busy=false;if(x.silent)return;xfer.err=x.message;reloadLatest()});
+}
+function machinesView(){
+  var M=server.machines||{},tot={},grand=0;
+  MACHINES.forEach(function(m){tot[m]=0;state.parts.forEach(function(p){tot[m]+=num((M[m]||{})[p.k])});grand+=tot[m]});
+  var h='<div class="stack"><div class="kpis">';
+  MACHINES.forEach(function(m){h+='<div class="kpi"><span class="label">'+m+'</span><b class="num">'+fmt(tot[m])+'</b></div>'});
+  h+='</div><div class="panel"><div class="panel-h"><h3>Machine material</h3></div><div class="scroll"><table class="matrix"><thead><tr><th>Material type</th>';
+  MACHINES.forEach(function(m){h+='<th class="r">'+m+'</th>'});
+  h+='<th class="r">Total</th></tr></thead><tbody>';
+  var any=false;
+  state.parts.forEach(function(p){
+    var row=0;MACHINES.forEach(function(m){row+=num((M[m]||{})[p.k])});if(!row)return;any=true;
+    h+='<tr><td>'+esc(partName(p))+'</td>';
+    MACHINES.forEach(function(m){var v=num((M[m]||{})[p.k]);h+='<td class="r num'+(v?'':' zero')+'">'+(v?fmt(v):'–')+'</td>'});
+    h+='<td class="r num"><b>'+fmt(row)+'</b></td></tr>';
+  });
+  if(!any)h+='<tr><td colspan="'+(MACHINES.length+2)+'" class="empty-note">No material has been transferred to a machine yet.</td></tr>';
+  h+='</tbody>'+(any?'<tfoot><tr><td>All material</td>'+MACHINES.map(function(m){return '<td class="r num">'+fmt(tot[m])+'</td>'}).join('')+'<td class="r num">'+fmt(grand)+'</td></tr></tfoot>':'')+'</table></div></div>';
+  var log=(server.transfers||[]).slice(0,50);
+  h+='<div class="panel"><div class="panel-h"><h3>Recent transfers</h3></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Material type</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
+  if(!log.length)h+='<tr><td colspan="6" class="empty-note">No transfers yet.</td></tr>';
+  log.forEach(function(e){var p=part(e.part);h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+esc(p?partName(p):e.partId)+'</td><td class="r num">'+fmt(e.qty)+'</td><td>'+esc(e.from)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>'});
+  h+='</tbody></table></div></div></div>';
+  return h;
+}
+
 /* ---------- admin ---------- */
 function loadAdmin(){
   return Promise.all([api('GET','/api/admin/users'),api('GET','/api/admin/audit')]).then(function(r){
     admin.users=r[0].users;admin.log=r[1].entries;if(ui.tab==='admin')render();
   }).catch(function(x){if(!x.silent){admin.err=x.message;render()}});
 }
-var ACTIONS={'login':'Signed in','login-failed':'Failed sign-in','save':'Saved racking','create-user':'Added user','update-user':'Changed user','delete-user':'Deleted user','change-passkey':'Changed own passkey'};
+var ACTIONS={'login':'Signed in','login-failed':'Failed sign-in','save':'Saved racking','create-user':'Added user','update-user':'Changed user','delete-user':'Deleted user','change-passkey':'Changed own passkey','transfer':'Transferred material'};
 function adminView(){
   var h='<div class="stack">';
   h+='<form class="panel" id="add-user-form"><div class="panel-h"><h3>Add user</h3></div>'+
@@ -365,10 +455,15 @@ root.addEventListener('click',function(e){
     adminDo(api('DELETE','/api/admin/users/'+encodeURIComponent(t.dataset.u)),t.dataset.u+' deleted.');
   }
   else if(a==='refreshlog')loadAdmin();
+  /* transfer actions */
+  else if(a==='xpick'){xfer.pick=t.dataset.v;xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer()}
+  else if(a==='xmachine'){xfer.machine=t.dataset.v;refreshTransfer()}
+  else if(a==='xgo')doTransfer();
 });
 
 root.addEventListener('change',function(e){
   var t=e.target;
+  if(t.dataset.act==='xpart'){xfer.part=t.value;xfer.pick=null;xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer();return}
   if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+t.value+'.');return}
   if(t.dataset.act!=='part'||!canEdit())return;
   var lv=lvOf(t),v=t.value,p=part(v);
@@ -380,7 +475,9 @@ root.addEventListener('change',function(e){
 });
 
 root.addEventListener('input',function(e){
-  var t=e.target,a=t.dataset.act;if(!canEdit())return;
+  var t=e.target,a=t.dataset.act;
+  if(a==='xqty'){xfer.qty=t.value;xfer.err='';xfer.msg='';refreshTransfer();return}
+  if(!canEdit())return;
   if(a==='qty'){
     var it=lvOf(t).items[+t.dataset.i];if(!it)return;
     it.qty=t.value===''?'':Math.max(0,num(t.value));changed();

@@ -174,3 +174,17 @@ td select{border:1px solid var(--line);background:var(--bg);border-radius:4px;pa
 .log td.detail{white-space:normal;min-width:220px}
 .stack{display:grid;gap:18px}
 .account{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+
+/* material transfer */
+.xfer tbody tr.go{background:color-mix(in srgb,var(--ok) 14%,transparent);cursor:pointer}
+.xfer tbody tr.go:hover{background:color-mix(in srgb,var(--ok) 24%,transparent)}
+.xfer tbody tr.no{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--muted)}
+.xfer tbody tr.picked{box-shadow:inset 4px 0 0 var(--ok);background:color-mix(in srgb,var(--ok) 30%,transparent)}
+.pick{width:22px;height:22px;border-radius:50%;border:2px solid var(--ok);background:var(--surface);cursor:pointer;padding:0}
+.pick[aria-pressed="true"]{background:radial-gradient(circle,var(--ok) 0 5px,var(--surface) 6px)}
+.tagl.inline{display:inline-block;font-size:15px}
+.machines{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px}
+.machine{border:2px solid var(--line);background:var(--surface);border-radius:8px;padding:16px 8px;cursor:pointer;font-family:var(--display);font-size:24px;font-weight:700;letter-spacing:.04em}
+.machine:hover{border-color:var(--muted)}
+.machine[aria-pressed="true"]{border-color:var(--beam);background:var(--beam);color:var(--beam-ink)}
+.tablefoot p{margin:0}
