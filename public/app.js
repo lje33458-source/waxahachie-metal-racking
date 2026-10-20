@@ -9,7 +9,7 @@ var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'ma
 var MACHINES=['EMK','EMLK','P4','L5'];
 var recv=null; // set at start (needs today())
 var mach={ret:null,used:'',busy:false,msg:'',err:''}; // ret is the machine being returned to the rack
-var tlog={range:'today',entries:null,err:''},mlog={range:'today',machine:'all',entries:null,err:''};
+var tlog={range:'today',entries:null,err:''},mlog={range:'today',machine:'all',entries:null,err:''},rlog={range:'today',entries:null,err:''};
 var xfer={part:'',qty:'',picks:[],machine:null,busy:false,msg:'',err:''}; // picks holds the chosen pallets' keys, in pick order
 var admin={users:[],log:[],msg:'',err:'',created:null,resetFor:null,armed:null};
 
@@ -373,7 +373,9 @@ function doTransfer(){
 }
 /* ---------- receive material ---------- */
 // New pallets coming in: pick the material, how many pallets and what is on each, then an open spot on the racking for each one.
-function blankRecv(){return {part:'',count:'',qtys:[],routings:[],date:today(),spots:[],busy:false,msg:'',err:''}}
+function blankRecv(){return {part:'',count:'',qtys:[],routings:[],date:today(),spots:[],confirmed:false,busy:false,msg:'',err:''}}
+// Every pallet needs a quantity and a routing number before spots are offered.
+function recvReady(){var n=recvCount();if(!n)return false;for(var i=0;i<n;i++)if(!recvQty(i)||!String(recv.routings[i]||'').trim())return false;return true}
 function recvCount(){var n=Number(recv.count);return recv.count!==''&&Number.isInteger(n)&&n>0&&n<=50?n:0}
 function spotKey(s,r,rk,lv){return s.key+'|'+r.row+'|'+rk.rack+'|'+lv.level}
 // Spots chosen that are still open, in the order they were chosen.
@@ -393,7 +395,7 @@ function receiveView(){
   h+='</select></div><div class="field"><label for="rv-count">Pallets received</label><input id="rv-count" class="num" type="number" inputmode="numeric" min="1" max="50" step="1" data-act="rcount" value="'+esc(recv.count)+'"></div>'+
     '<div class="field"><label for="rv-date">Date received</label><input id="rv-date" type="date" data-act="rdate" value="'+esc(recv.date)+'"></div></div>';
   if(recv.msg)h+='<p class="ok-msg" role="status" style="padding:0 14px 12px">'+esc(recv.msg)+'</p>';
-  h+='<div id="rv-qtys">'+recvQtys()+'</div></div><div id="rv-body" class="stack">'+recvBody()+'</div></div>';
+  h+='<div id="rv-qtys">'+recvQtys()+'</div></div><div id="rv-body" class="stack">'+recvBody()+'</div>'+logPanel('rlog')+'</div>';
   return h;
 }
 function recvQtys(){
@@ -403,14 +405,16 @@ function recvQtys(){
   for(var i=0;i<n;i++){
     if(recv.qtys[i]==null)recv.qtys[i]=p.qtyPerPallet!==''&&p.qtyPerPallet!=null?String(p.qtyPerPallet):'';
     h+='<tr><td>Pallet '+(i+1)+'</td><td><input id="rv-q-'+i+'" class="num" type="number" inputmode="numeric" min="1" step="1" data-act="rqty" data-i="'+i+'" value="'+esc(recv.qtys[i])+'" aria-label="Quantity on pallet '+(i+1)+'"></td>'+
-      '<td><input id="rv-rt-'+i+'" data-act="rrt" data-i="'+i+'" value="'+esc(recv.routings[i]||'')+'" aria-label="Routing number for pallet '+(i+1)+'" placeholder="Optional"></td></tr>';
+      '<td><input id="rv-rt-'+i+'" data-act="rrt" data-i="'+i+'" value="'+esc(recv.routings[i]||'')+'" aria-label="Routing number for pallet '+(i+1)+'" required></td></tr>';
   }
-  return h+'</tbody></table></div>';
+  return h+'</tbody></table></div><div class="confirmrow"><p class="err" id="rv-cerr" role="alert"></p><button class="btn primary" data-act="rconfirm">Confirm</button></div>';
 }
 function recvBody(){
   var n=recvCount(),p=part(recv.part);
   if(!p)return '<p class="empty-note">Select a material type to start.</p>';
   if(!n)return '<p class="empty-note">Enter how many pallets were received (up to 50).</p>';
+  if(!recv.confirmed)return '<p class="empty-note">Enter the quantity and routing # for each pallet, then press Confirm to see open spots on the racking.</p>';
+  if(!recvReady())return '<p class="err">Every pallet needs a quantity and a routing #. Fill them in to see open spots.</p>';
   var S=recvSpots(),idx={};S.forEach(function(x,i){idx[x.section+'|'+x.row+'|'+x.rack+'|'+x.level]=i+1});
   var h='<div class="tally'+(S.length===n?' ok':'')+'"><span class="label">Open spots chosen</span><b class="num">'+S.length+' / '+n+'</b><span class="dim">'+(S.length===n?'Every pallet has a spot.':'Click an open spot for pallet '+(S.length+1)+'.')+'</span></div>';
   h+='<div class="panel"><div class="panel-h"><h3>Open spots on the racking</h3><p>Open spots are white. Click one for each pallet, in order; click it again to clear it.</p></div><div class="spotmaps">';
@@ -435,10 +439,8 @@ function recvBody(){
     h+='</tbody></table></div>';
   })});
   h+='</div>'+(anyOpen?'':'<p class="empty-note">There are no open spots on the racking.</p>')+'</div>';
-  var qOk=true;for(var i=0;i<n;i++)if(!recvQty(i))qOk=false;
   if(recv.err)h+='<p class="err" role="alert">'+esc(recv.err)+'</p>';
   if(S.length<n)return h;
-  if(!qOk)return h+'<p class="err">Enter the quantity on every pallet.</p>';
   var total=0,items=S.map(function(x,i){total+=recvQty(i);return {section:x.section,row:x.row,addr:x.addr,loc:x.loc,pn:partName(p),qty:recvQty(i),routing:recv.routings[i]||'',received:recv.date}});
   h+='<div class="panel"><div class="panel-h"><h3>Put away</h3><p>'+n+' pallet'+(n>1?'s':'')+' · '+fmt(total)+' × '+esc(partName(p))+'</p></div><div class="tablefoot">';
   if(!canEdit())h+='<p class="dim">Your account can view but not receive material.</p>';
@@ -452,8 +454,7 @@ function recvBody(){
 function refreshRecv(qtys){if(qtys){var q=document.getElementById('rv-qtys');if(q)q.innerHTML=recvQtys()}var el=document.getElementById('rv-body');if(el)el.innerHTML=recvBody()}
 function doReceive(){
   var n=recvCount(),S=recvSpots();
-  if(!n||S.length<n||recv.busy||dirty||!canEdit())return;
-  for(var i=0;i<n;i++)if(!recvQty(i))return;
+  if(!n||!recv.confirmed||!recvReady()||S.length<n||recv.busy||dirty||!canEdit())return;
   recv.busy=true;recv.err='';refreshRecv();
   var name=partName(part(recv.part)||{});
   api('POST','/api/receive',{part:recv.part,received:recv.date,pallets:S.map(function(x,i){return {section:x.section,row:x.row,rack:x.rack,level:x.level,qty:recvQty(i),routing:recv.routings[i]||''}})})
@@ -555,38 +556,48 @@ function doReturn(){
     .catch(function(x){mach.busy=false;if(x.silent)return;mach.err=x.message;reloadLatest()});
 }
 var RANGES=[['today','Today'],['week','Last week'],['month','Last month'],['year','Last year',1],['all','All time',1]];
-// Two logs read the same transfer list: the Machine Transfer Log on the Machine tab, and the admins' Transfer Log on Master (filterable by machine).
-var LOGS={tlog:{title:'Machine Transfer Log',st:tlog},mlog:{title:'Transfer Log',st:mlog,byMachine:true}};
+// Three logs read the same list: Machine Transfer Log (Machine tab), Receiving Log (Receive Material tab),
+// and the admins' Transfer Log on Master, which holds both and filters by machine or receiving.
+var LOGS={tlog:{title:'Machine Transfer Log',st:tlog,only:'machine'},rlog:{title:'Receiving Log',st:rlog,only:'receive'},mlog:{title:'Transfer Log',st:mlog,menus:true}};
 function loadLog(id){
-  if(!id){if(ui.tab==='machines')loadLog('tlog');if(ui.tab==='master'&&isAdmin())loadLog('mlog');return}
+  if(!id){if(ui.tab==='machines')loadLog('tlog');if(ui.tab==='receive')loadLog('rlog');if(ui.tab==='master'&&isAdmin())loadLog('mlog');return}
   var st=LOGS[id].st,since=new Date();since.setHours(0,0,0,0);
   var redraw=function(){var el=document.getElementById(id);if(el)el.outerHTML=logPanel(id)};
   return api('GET','/api/transfers?range='+st.range+'&since='+since.getTime()).then(function(j){st.entries=j.entries;st.err='';redraw()})
     .catch(function(x){if(!x.silent){st.err=x.message;redraw()}});
 }
+function logFilters(id){
+  var L=LOGS[id],st=L.st,ranges=RANGES.filter(function(r){return !r[2]||isAdmin()});
+  if(!L.menus)return '<div class="chips">'+ranges.map(function(r){return '<button class="chip sm" data-act="lrange" data-log="'+id+'" data-v="'+r[0]+'" aria-pressed="'+(st.range===r[0])+'">'+r[1]+'</button>'}).join('')+'</div>';
+  return '<div class="menus"><label class="field"><span>Date</span><select data-act="lrangesel" data-log="'+id+'">'+ranges.map(function(r){return '<option value="'+r[0]+'"'+(st.range===r[0]?' selected':'')+'>'+r[1]+'</option>'}).join('')+'</select></label>'+
+    '<label class="field"><span>Machine / receiving</span><select data-act="lmachsel" data-log="'+id+'">'+[['all','All'],['receive','Receiving']].concat(MACHINES.map(function(m){return [m,m]})).map(function(o){return '<option value="'+o[0]+'"'+(st.machine===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select></label>'+
+    '<button class="btn sm" data-act="lreset" data-log="'+id+'">Reset to default</button></div>';
+}
 function logPanel(id){
   var L=LOGS[id],st=L.st;
-  var h='<div class="panel" id="'+id+'"><div class="panel-h"><h3>'+L.title+'</h3><div class="filters"><div class="chips">';
-  RANGES.forEach(function(r){if(r[2]&&!isAdmin())return;h+='<button class="chip sm" data-act="lrange" data-log="'+id+'" data-v="'+r[0]+'" aria-pressed="'+(st.range===r[0])+'">'+r[1]+'</button>'});
-  h+='</div>';
-  if(L.byMachine){h+='<div class="chips">';['all'].concat(MACHINES).forEach(function(m){h+='<button class="chip sm" data-act="lmach" data-log="'+id+'" data-v="'+m+'" aria-pressed="'+(st.machine===m)+'">'+(m==='all'?'All machines':m)+'</button>'});h+='</div>'}
-  h+='</div></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Part Number</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
-  var list=(st.entries||[]).filter(function(e){return L.byMachine?(st.machine==='all'||e.machine===st.machine):!!e.machine});
+  var h='<div class="panel" id="'+id+'"><div class="panel-h"><h3>'+L.title+'</h3>'+logFilters(id)+'</div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Part Number</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
+  var list=(st.entries||[]).filter(function(e){
+    var rcv=e.kind==='receive';
+    if(L.only==='machine')return !rcv&&!!e.machine;
+    if(L.only==='receive')return rcv;
+    return st.machine==='all'||(st.machine==='receive'?rcv:!rcv&&e.machine===st.machine);
+  });
   if(st.err)h+='<tr><td colspan="7" class="err">'+esc(st.err)+'</td></tr>';
   else if(!st.entries)h+='<tr><td colspan="7" class="empty-note">Loading…</td></tr>';
   else if(!list.length)h+='<tr><td colspan="7" class="empty-note">Nothing in this period.</td></tr>';
   list.forEach(function(e){
+    var pals=Array.isArray(e.pallets)?e.pallets:[],from,to,pns={};
     if(e.kind==='receive'){
-      h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>Received · '+(e.pallets||[]).length+' pallet'+((e.pallets||[]).length===1?'':'s')+'</td><td>'+esc(e.partNumber||e.part)+'</td><td class="r num">'+fmt(e.qty)+'</td>'+
-        '<td class="detail"><b>Receiving</b></td><td class="detail">'+esc((e.pallets||[]).map(function(x){return x.loc+' ('+fmt(x.qty)+')'}).join(', '))+'</td></tr>';
-      return;
+      pns[e.partNumber||e.part]=1;
+      from='<b>Receiving</b>';to=esc(pals.map(function(x){return x.loc+' ('+fmt(x.qty)+')'}).join(', '));
+    }else{
+      var ret=e.kind==='return';
+      if(ret)pals.forEach(function(x){pns[x.partNumber||x.part]=1});else pns[e.partNumber||e.part]=1;
+      var rack=esc(pals.filter(function(x){return !ret||x.qty}).map(function(x){return x.loc+(ret?' ('+fmt(x.qty)+')':'')}).join(', ')||(ret?'Nothing left over':'')),m='<b>'+esc(e.machine)+'</b>';
+      from=ret?m:rack;to=ret?rack:m;
     }
-    var ret=e.kind==='return',pals=Array.isArray(e.pallets)?e.pallets:[];
-    var pns={};if(ret)pals.forEach(function(x){pns[x.partNumber||x.part]=1});else pns[e.partNumber||e.part]=1;
-    var locs=pals.filter(function(x){return !ret||x.qty}).map(function(x){return x.loc+(ret?' ('+fmt(x.qty)+')':'')}).join(', ')||(ret?'Nothing left over':'');
-    var mach_='<b>'+esc(e.machine)+'</b>',rack='<span class="detail">'+esc(locs)+'</span>';
-    h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+(ret?'Return to rack · '+fmt(e.used)+' used':'Transfer · '+fmt(e.requested)+' requested')+'</td><td>'+esc(Object.keys(pns).join(', '))+'</td><td class="r num">'+fmt(e.qty)+'</td>'+
-      '<td class="detail">'+(ret?mach_:rack)+'</td><td class="detail">'+(ret?rack:mach_)+'</td></tr>';
+    h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+(e.kind==='receive'?'Receive':'Transfer')+'</td><td>'+esc(Object.keys(pns).join(', '))+'</td><td class="r num">'+fmt(e.qty)+'</td>'+
+      '<td class="detail">'+from+'</td><td class="detail">'+to+'</td></tr>';
   });
   return h+'</tbody></table></div></div>';
 }
@@ -765,7 +776,13 @@ root.addEventListener('click',function(e){
   else if(a==='rspot'){var si=recv.spots.indexOf(t.dataset.v);if(si>=0)recv.spots.splice(si,1);else if(recv.spots.length<recvCount())recv.spots.push(t.dataset.v);recv.err='';recv.msg='';refreshRecv()}
   else if(a==='rgo')doReceive();
   else if(a==='lrange'){var lst=LOGS[t.dataset.log].st;lst.range=t.dataset.v;lst.entries=null;var el=document.getElementById(t.dataset.log);if(el)el.outerHTML=logPanel(t.dataset.log);loadLog(t.dataset.log)}
-  else if(a==='lmach'){LOGS[t.dataset.log].st.machine=t.dataset.v;var el2=document.getElementById(t.dataset.log);if(el2)el2.outerHTML=logPanel(t.dataset.log)}
+  else if(a==='lreset'){var rs=LOGS[t.dataset.log].st;rs.range='today';rs.machine='all';rs.entries=null;var el2=document.getElementById(t.dataset.log);if(el2)el2.outerHTML=logPanel(t.dataset.log);loadLog(t.dataset.log)}
+  else if(a==='rconfirm'){
+    var bad=[];for(var ci=0;ci<recvCount();ci++)if(!recvQty(ci)||!String(recv.routings[ci]||'').trim())bad.push(ci+1);
+    var ce=document.getElementById('rv-cerr');
+    if(bad.length){recv.confirmed=false;if(ce)ce.textContent='Enter the quantity and routing # for pallet'+(bad.length>1?'s ':' ')+bad.join(', ')+'.';refreshRecv();return}
+    if(ce)ce.textContent='';recv.confirmed=true;refreshRecv();
+  }
   else if(a==='ptdel'&&isAdmin()){var S2=sec(t.dataset.s);S2.rows[+t.dataset.r].racks[+t.dataset.k].levels[+t.dataset.l].items.splice(+t.dataset.i,1);changed();render()}
   else if(a==='addpallet'&&isAdmin()){
     var ge=function(id){return document.getElementById(id)},er=ge('ap-err'),lp=ge('ap-loc').value.split('|'),pk=ge('ap-part').value,pp=part(pk),aq=ge('ap-qty').value;
@@ -780,7 +797,8 @@ root.addEventListener('click',function(e){
 
 root.addEventListener('change',function(e){
   var t=e.target;
-  if(t.dataset.act==='rpart'){recv.part=t.value;recv.qtys=[];recv.err='';recv.msg='';refreshRecv(true);return}
+  if(t.dataset.act==='lrangesel'||t.dataset.act==='lmachsel'){var ls=LOGS[t.dataset.log].st;if(t.dataset.act==='lmachsel'){ls.machine=t.value;var e3=document.getElementById(t.dataset.log);if(e3)e3.outerHTML=logPanel(t.dataset.log);return}ls.range=t.value;ls.entries=null;loadLog(t.dataset.log);return}
+  if(t.dataset.act==='rpart'){recv.part=t.value;recv.qtys=[];recv.confirmed=false;recv.err='';recv.msg='';refreshRecv(true);return}
   if(t.dataset.act==='xpart'){xfer.part=t.value;xfer.picks=[];xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer();return}
   if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+t.value+'.');return}
   if(t.dataset.act!=='part'||!canEdit())return;
@@ -795,9 +813,9 @@ root.addEventListener('change',function(e){
 root.addEventListener('input',function(e){
   var t=e.target,a=t.dataset.act;
   if(a==='xqty'){xfer.qty=t.value;xfer.err='';xfer.msg='';refreshTransfer();return}
-  if(a==='rcount'){recv.count=t.value;recv.err='';refreshRecv(true);return}
-  if(a==='rqty'){recv.qtys[+t.dataset.i]=t.value;refreshRecv();return}
-  if(a==='rrt'){recv.routings[+t.dataset.i]=t.value;refreshRecv();return}
+  if(a==='rcount'){recv.count=t.value;recv.err='';recv.confirmed=false;refreshRecv(true);return}
+  if(a==='rqty'){recv.qtys[+t.dataset.i]=t.value;var ce0=document.getElementById('rv-cerr');if(ce0)ce0.textContent='';refreshRecv();return}
+  if(a==='rrt'){recv.routings[+t.dataset.i]=t.value;var ce0=document.getElementById('rv-cerr');if(ce0)ce0.textContent='';refreshRecv();return}
   if(a==='rdate'){recv.date=t.value||today();refreshRecv();return}
   if(a==='mused'){mach.used=t.value;mach.err='';refreshReturn();return}
   if(!canEdit())return;
