@@ -7,6 +7,8 @@ var state=null;         // working copy being edited
 var dirty=false,saving=false,newer=null,saveErr='';
 var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master', 'transfer', 'machines' or 'admin'; rows holds the picked row per section
 var MACHINES=['EMK','EMLK','P4','L5'];
+var mach={ret:null,used:'',busy:false,msg:'',err:''}; // ret is the machine being returned to the rack
+var tlog={range:'today',entries:null,err:''};
 var xfer={part:'',qty:'',picks:[],machine:null,busy:false,msg:'',err:''}; // picks holds the chosen pallets' keys, in pick order
 var admin={users:[],log:[],msg:'',err:'',created:null,resetFor:null,armed:null};
 
@@ -75,6 +77,7 @@ function start(){
     else store('wmr-draft:'+me.id);
     render();
     if(ui.tab==='admin')loadAdmin();
+    if(ui.tab==='machines')loadLog();
   });
 }
 
@@ -113,7 +116,7 @@ function render(){
       (dirty?'Your unsaved changes were made on the older version. Load the latest to continue; your edits will be discarded.':'')+'</span>'+
       '<button class="btn" data-act="reload">Load latest</button></div>':'')+
     '<nav class="tabs" role="tablist">'+
-      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('master','Master')+tab('transfer','Transfer Material')+tab('machines','Machine Material')+(isAdmin()?tab('admin','Admin'):'')+
+      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('transfer','Transfer Material')+tab('machines','Machine')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
     '</nav>'+
     '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T))+'</section>';
   renderStatus();
@@ -277,8 +280,8 @@ function transferResults(){
       '<span class="meter"><i style="width:'+pct+'%"></i></span><span class="dim">'+(enough?'Enough selected.':fmt(q-P.total)+' more needed.')+'</span>'+
       (P.list.length===1&&!enough&&!list.some(function(x){return x.key!==P.list[0].key&&P.total+x.qty>=q})?'<span class="err">No other pallet makes up the rest. Remove '+esc(P.list[0].loc)+' and pick another.</span>':'')+'</div>';
   }
-  h+='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets cover '+fmt(q)+' on their own. Yellow pallets have less; pick a second pallet to make up the rest. Red pallets can\'t make up the rest. Up to '+MAX_PALLETS+' pallets.':'Enter the quantity requested to choose pallets.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Date received</th><th>Part Number</th><th>Routing #</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
-  if(!list.length)h+='<tr><td colspan="6" class="empty-note">No pallets of this material are on the racking.</td></tr>';
+  h+='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets cover '+fmt(q)+' on their own. Yellow pallets have less; pick a second pallet to make up the rest. Red pallets can\'t make up the rest. Up to '+MAX_PALLETS+' pallets.':'Enter the quantity requested to choose pallets.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Date received</th><th>Part Number</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
+  if(!list.length)h+='<tr><td colspan="5" class="empty-note">No pallets of this material are on the racking.</td></tr>';
   list.forEach(function(x,i){
     // Unpicked pallets can be added while fewer than MAX_PALLETS are picked, the request isn't met yet, and this pallet would meet it as the last pick.
     var sel=xfer.picks.indexOf(x.key)>=0,n=P.list.length,cls='',can=false;
@@ -290,7 +293,7 @@ function transferResults(){
     }
     h+='<tr class="'+cls+(sel?' picked':'')+'"'+(can?' data-act="xpick" data-v="'+esc(x.key)+'"':'')+'><td>'+
       (can?'<button class="pick" aria-pressed="'+sel+'" aria-label="'+(sel?'Remove ':'Add ')+esc(x.loc)+'"></button>':'')+'</td>'+
-      '<td class="num">'+esc(day(x.received))+(i<2?' <span class="rec">Recommended</span>':'')+'</td><td>'+esc(partName(p))+'</td><td class="num">'+esc(x.routing)+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td class="r num"><b>'+fmt(x.qty)+'</b></td></tr>';
+      '<td class="num">'+esc(day(x.received))+(i<2?' <span class="rec">Recommended</span>':'')+'</td><td>'+esc(partName(p))+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td class="r num"><b>'+fmt(x.qty)+'</b></td></tr>';
   });
   h+='</tbody></table></div></div>';
   if(xfer.err)h+='<p class="err" role="alert">'+esc(xfer.err)+'</p>';
@@ -310,14 +313,14 @@ function transferResults(){
   if(xfer.machine)h+='<div class="panel"><div class="panel-h"><h3>Ready for print</h3><p>Pick sheet for this transfer. It fits on one 8.5 × 11 in page.</p><button class="btn" data-act="xprint">Print</button></div><div class="sheet-wrap">'+pickSheet(p,q,P)+'</div></div>';
   return h;
 }
-// One-page pick sheet: each rack row holding a selected pallet drawn as a grid (racks across, levels top to bottom), then the pick list.
-function pickSheet(p,q,P){
-  var num_={};P.list.forEach(function(x,i){num_[x.section+'|'+x.addr]=i+1});
-  var h='<div class="sheet"><div class="sheet-h"><div><b>Material transfer</b><span>'+esc(when(new Date().toISOString()))+' · '+esc(me.id)+'</span></div><div class="to">To <b>'+esc(xfer.machine)+'</b></div></div>';
-  h+='<p class="sheet-part"><b>'+esc(partName(p))+'</b>'+(p.description?' · '+esc(p.description):'')+'</p>';
-  h+='<div class="sheet-racks">';
+// A one-page printable sheet: each rack row holding a listed pallet drawn as a grid (racks across, levels top to bottom), then the list.
+// o: {title, dir ('To'|'From'), machine, sub (html), items [{section,row,addr,loc,pn,qty,routing,received}], foot, footQty}
+function sheet(o){
+  var num_={};o.items.forEach(function(x,i){num_[x.section+'|'+x.addr]=i+1});
+  var h='<div class="sheet"><div class="sheet-h"><div><b>'+esc(o.title)+'</b><span>'+esc(when(new Date().toISOString()))+' · '+esc(me.id)+'</span></div><div class="to">'+o.dir+' <b>'+esc(o.machine)+'</b></div></div>';
+  h+='<p class="sheet-part">'+o.sub+'</p><div class="sheet-racks">';
   state.sections.forEach(function(s){s.rows.forEach(function(r){
-    if(!P.list.some(function(x){return x.section===s.key&&String(x.row)===String(r.row)}))return;
+    if(!o.items.some(function(x){return x.section===s.key&&String(x.row)===String(r.row)}))return;
     var all={};r.racks.forEach(function(rk){rk.levels.forEach(function(lv){all[lv.level]=1})});
     var lvls=Object.keys(all).map(Number).sort(function(a,b){return b-a});
     h+='<div class="sheet-row"><div class="sheet-row-h">'+(state.sections.length>1?esc(s.name)+' · ':'')+'Row '+esc(r.row)+'</div><table class="rackmap"><thead><tr><th></th>';
@@ -336,12 +339,18 @@ function pickSheet(p,q,P){
     h+='</tbody></table></div>';
   })});
   h+='</div><table class="sheet-list"><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th>Routing #</th><th>Received</th><th class="r">Quantity</th><th>Machine</th><th>Done</th></tr></thead><tbody>';
-  P.list.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(partName(p))+'</td><td>'+esc(x.routing)+'</td><td>'+esc(day(x.received))+'</td><td class="r">'+fmt(x.qty)+'</td><td>'+esc(xfer.machine)+'</td><td><span class="box"></span></td></tr>'});
-  h+='</tbody><tfoot><tr><td colspan="5">'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · requested '+fmt(q)+'</td><td class="r">'+fmt(P.total)+'</td><td>'+esc(xfer.machine)+'</td><td></td></tr></tfoot></table></div>';
+  if(!o.items.length)h+='<tr><td colspan="8">Nothing goes back to the racking.</td></tr>';
+  o.items.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(x.pn)+'</td><td>'+esc(x.routing)+'</td><td>'+esc(day(x.received))+'</td><td class="r">'+fmt(x.qty)+'</td><td>'+esc(o.machine)+'</td><td><span class="box"></span></td></tr>'});
+  h+='</tbody><tfoot><tr><td colspan="5">'+esc(o.foot)+'</td><td class="r">'+fmt(o.footQty)+'</td><td>'+esc(o.machine)+'</td><td></td></tr></tfoot></table></div>';
   return h;
 }
+function pickSheet(p,q,P){
+  return sheet({title:'Material transfer',dir:'To',machine:xfer.machine,sub:'<b>'+esc(partName(p))+'</b>'+(p.description?' · '+esc(p.description):''),
+    items:P.list.map(function(x){return {section:x.section,row:x.row,addr:x.addr,loc:x.loc,pn:partName(p),qty:x.qty,routing:x.routing,received:x.received}}),
+    foot:P.list.length+' pallet'+(P.list.length>1?'s':'')+' · requested '+fmt(q),footQty:P.total});
+}
 function printSheet(){
-  var src=document.querySelector('#xf-results .sheet');if(!src)return;
+  var src=document.querySelector('#view .sheet');if(!src)return;
   var pr=document.getElementById('print-root');
   if(!pr){pr=document.createElement('div');pr.id='print-root';document.body.appendChild(pr)}
   pr.innerHTML=src.outerHTML;
@@ -357,33 +366,117 @@ function doTransfer(){
     .then(function(d){
       server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
       xfer={part:xfer.part,qty:'',picks:[],machine:null,busy:false,err:'',msg:'Moved '+P.list.length+' pallet'+(P.list.length>1?'s':'')+' ('+fmt(P.total)+' × '+name+') from '+P.list.map(function(x){return x.loc}).join(', ')+' to '+m+'.'};
-      render();
+      render();loadLog();
     })
     .catch(function(x){xfer.busy=false;if(x.silent)return;xfer.err=x.message;reloadLatest()});
 }
+/* ---------- machines ---------- */
+function atMachine(m){return ((server.machines||{})[m])||[]}
+function secName(k){var s=sec(k);return s?s.name:k}
+function fromLoc(x){var f=x.from||{};return {section:f.section||'hq',row:f.row,addr:f.row+'-'+f.rack+'-'+f.level,loc:(state.sections.length>1?secName(f.section||'hq')+' ':'')+(x.loc||f.row+'-'+f.rack+'-'+f.level)}}
+// Same steps as the server: the quantity used comes off the oldest-received pallets first; the rest of each pallet goes back to its spot.
+function returnPlan(list,used){
+  var total=list.reduce(function(t,x){return t+num(x.qty)},0);
+  if(!isFinite(used)||used<0||used>total)return null;
+  var left=used;
+  return list.map(function(p,n){return {p:p,n:n}}).sort(function(a,b){return String(a.p.received||'9999').localeCompare(String(b.p.received||'9999'))||a.n-b.n})
+    .map(function(o){var u=Math.min(left,num(o.p.qty));left-=u;return {p:o.p,used:u,back:num(o.p.qty)-u}});
+}
+// Default quantity used: what was requested for each transfer still at the machine, capped at what is there.
+function requestedAt(m){
+  var seen={},req=0,total=0;
+  atMachine(m).forEach(function(x){total+=num(x.qty);if(x.batch&&!seen[x.batch]){seen[x.batch]=1;req+=num(x.requested)}});
+  return Math.min(req,total);
+}
 function machinesView(){
-  var M=server.machines||{},tot={},grand=0;
-  MACHINES.forEach(function(m){tot[m]=0;state.parts.forEach(function(p){tot[m]+=num((M[m]||{})[p.k])});grand+=tot[m]});
-  var h='<div class="stack"><div class="kpis">';
-  MACHINES.forEach(function(m){h+='<div class="kpi"><span class="label">'+m+'</span><b class="num">'+fmt(tot[m])+'</b></div>'});
-  h+='</div><div class="panel"><div class="panel-h"><h3>Machine material</h3></div><div class="scroll"><table class="matrix"><thead><tr><th>Material type</th>';
-  MACHINES.forEach(function(m){h+='<th class="r">'+m+'</th>'});
-  h+='<th class="r">Total</th></tr></thead><tbody>';
-  var any=false;
-  state.parts.forEach(function(p){
-    var row=0;MACHINES.forEach(function(m){row+=num((M[m]||{})[p.k])});if(!row)return;any=true;
-    h+='<tr><td>'+esc(partName(p))+'</td>';
-    MACHINES.forEach(function(m){var v=num((M[m]||{})[p.k]);h+='<td class="r num'+(v?'':' zero')+'">'+(v?fmt(v):'–')+'</td>'});
-    h+='<td class="r num"><b>'+fmt(row)+'</b></td></tr>';
+  var h='<div class="stack"><div class="mcards">';
+  MACHINES.forEach(function(m){
+    var list=atMachine(m),tot=list.reduce(function(t,x){return t+num(x.qty)},0);
+    h+='<div class="mcard'+(mach.ret===m?' on':'')+'"><div class="mcard-h"><h3>'+m+'</h3><span class="dim num">'+list.length+' pallet'+(list.length===1?'':'s')+' · '+fmt(tot)+' sheets</span></div><div class="mpals">';
+    if(!list.length)h+='<p class="dim">No material at this machine.</p>';
+    list.forEach(function(x){var p=part(x.part),f=fromLoc(x);
+      h+='<div class="mpal"><b class="pn">'+esc(p?partName(p):'Removed part')+'</b><span class="tagl inline">'+esc(f.loc)+'</span><span class="q num">'+fmt(num(x.qty))+'</span><small class="dim">Received '+esc(day(x.received))+'</small></div>'});
+    h+='</div>';
+    if(list.length&&canEdit())h+='<div class="mcard-f"><button class="btn'+(mach.ret===m?' primary':'')+'" data-act="mret" data-v="'+m+'">'+(mach.ret===m?'Close return':'Return to Rack')+'</button></div>';
+    h+='</div>';
   });
-  if(!any)h+='<tr><td colspan="'+(MACHINES.length+2)+'" class="empty-note">No material has been transferred to a machine yet.</td></tr>';
-  h+='</tbody>'+(any?'<tfoot><tr><td>All material</td>'+MACHINES.map(function(m){return '<td class="r num">'+fmt(tot[m])+'</td>'}).join('')+'<td class="r num">'+fmt(grand)+'</td></tr></tfoot>':'')+'</table></div></div>';
-  var log=(server.transfers||[]).slice(0,50);
-  h+='<div class="panel"><div class="panel-h"><h3>Recent transfers</h3></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Material type</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
-  if(!log.length)h+='<tr><td colspan="6" class="empty-note">No transfers yet.</td></tr>';
-  log.forEach(function(e){var p=part(e.part);h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+esc(p?partName(p):(e.partNumber||e.partId))+'</td><td class="r num">'+fmt(e.qty)+'</td><td>'+esc(e.from)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>'});
-  h+='</tbody></table></div></div></div>';
+  h+='</div>';
+  if(mach.msg)h+='<p class="ok-msg" role="status">'+esc(mach.msg)+'</p>';
+  if(mach.ret&&atMachine(mach.ret).length)h+='<div id="mr-results" class="stack">'+returnPanel()+'</div>';
+  // totals by part
+  var any=false,tot={},grand=0;MACHINES.forEach(function(m){tot[m]=0});
+  var rowsH='';
+  state.parts.forEach(function(p){
+    var v={},row=0;MACHINES.forEach(function(m){v[m]=atMachine(m).reduce(function(t,x){return t+(x.part===p.k?num(x.qty):0)},0);row+=v[m];tot[m]+=v[m]});
+    if(!row)return;any=true;grand+=row;
+    rowsH+='<tr><td>'+esc(partName(p))+'</td>'+MACHINES.map(function(m){return '<td class="r num'+(v[m]?'':' zero')+'">'+(v[m]?fmt(v[m]):'–')+'</td>'}).join('')+'<td class="r num"><b>'+fmt(row)+'</b></td></tr>';
+  });
+  h+='<div class="panel"><div class="panel-h"><h3>Machine</h3></div><div class="scroll"><table class="matrix"><thead><tr><th>Part Number</th>'+MACHINES.map(function(m){return '<th class="r">'+m+'</th>'}).join('')+'<th class="r">Total</th></tr></thead><tbody>'+
+    (any?rowsH:'<tr><td colspan="'+(MACHINES.length+2)+'" class="empty-note">No material is at a machine.</td></tr>')+'</tbody>'+
+    (any?'<tfoot><tr><td>All material</td>'+MACHINES.map(function(m){return '<td class="r num">'+fmt(tot[m])+'</td>'}).join('')+'<td class="r num">'+fmt(grand)+'</td></tr></tfoot>':'')+'</table></div></div>';
+  h+=logPanel();
+  return h+'</div>';
+}
+function returnPanel(){
+  var m=mach.ret,list=atMachine(m),total=list.reduce(function(t,x){return t+num(x.qty)},0);
+  var h='<div class="panel"><div class="panel-h"><h3>Return to rack · '+m+'</h3><p>Enter how much was used at '+m+'. That comes off the oldest pallets first, and what is left on each pallet goes back to the spot it came from.</p></div>';
+  h+='<div class="formrow"><div class="field"><label for="mr-used">Quantity used</label><input id="mr-used" class="num" type="number" inputmode="numeric" min="0" max="'+total+'" step="1" data-act="mused" value="'+esc(mach.used)+'"></div><p class="dim" style="margin:0 0 10px">'+fmt(total)+' sheets at '+m+'</p></div></div>';
+  return h+'<div id="mr-body" class="stack">'+returnBody()+'</div>';
+}
+// The plan, the confirm button and the print sheet: redrawn as the quantity used is typed.
+function returnBody(){
+  var m=mach.ret,list=atMachine(m),total=list.reduce(function(t,x){return t+num(x.qty)},0);
+  var used=mach.used===''?NaN:Number(mach.used),plan=returnPlan(list,used);
+  if(!plan)return '<p class="err">Enter a quantity from 0 to '+fmt(total)+'.</p>';
+  var h='<div class="panel"><div class="panel-h"><h3>Back to the racking</h3></div><div class="scroll"><table><thead><tr><th>Pallet from</th><th>Part Number</th><th>Routing #</th><th class="r">At machine</th><th class="r">Used</th><th class="r">Return to rack</th></tr></thead><tbody>';
+  var back=0;
+  plan.forEach(function(x){var p=part(x.p.part),f=fromLoc(x.p);back+=x.back;
+    h+='<tr><td><span class="tagl inline">'+esc(f.loc)+'</span></td><td>'+esc(p?partName(p):'Removed part')+'</td><td class="num">'+esc(x.p.routing)+'</td><td class="r num">'+fmt(num(x.p.qty))+'</td><td class="r num">'+fmt(x.used)+'</td><td class="r num"><b>'+(x.back?fmt(x.back):'Used up')+'</b></td></tr>'});
+  h+='</tbody><tfoot><tr><td colspan="3">Total</td><td class="r num">'+fmt(total)+'</td><td class="r num">'+fmt(used)+'</td><td class="r num">'+fmt(back)+'</td></tr></tfoot></table></div>';
+  if(mach.err)h+='<p class="err" role="alert" style="padding:10px 14px 0">'+esc(mach.err)+'</p>';
+  h+='<div class="tablefoot">';
+  if(dirty)h+='<p class="err">Save or undo your racking changes before returning material.</p>';
+  else h+='<button class="btn primary" data-act="mgo"'+(mach.busy?' disabled':'')+'>'+(mach.busy?'Returning…':'Confirm return to rack')+'</button> <button class="btn ghost" data-act="mret" data-v="'+m+'">Cancel</button>';
+  h+='</div></div>';
+  var items=plan.filter(function(x){return x.back}).map(function(x){var p=part(x.p.part),f=fromLoc(x.p);return {section:f.section,row:f.row,addr:f.addr,loc:f.loc,pn:p?partName(p):'',qty:x.back,routing:x.p.routing,received:x.p.received}});
+  h+='<div class="panel"><div class="panel-h"><h3>Ready for print</h3><p>Return sheet: put each pallet back in the spot marked. It fits on one 8.5 × 11 in page.</p><button class="btn" data-act="xprint">Print</button></div><div class="sheet-wrap">'+
+    sheet({title:'Return to rack',dir:'From',machine:m,sub:'Used at '+esc(m)+': <b>'+fmt(used)+'</b> of '+fmt(total)+' sheets. Return each pallet below to the spot it came from.',items:items,foot:items.length+' pallet'+(items.length===1?'':'s')+' back to the racking',footQty:back})+'</div></div>';
   return h;
+}
+function refreshReturn(){var el=document.getElementById('mr-body');if(el)el.innerHTML=returnBody()}
+function doReturn(){
+  var m=mach.ret,list=atMachine(m),used=Number(mach.used),plan=returnPlan(list,used);
+  if(!m||!plan||mach.busy||dirty||!canEdit()||mach.used==='')return;
+  mach.busy=true;mach.err='';refreshReturn();
+  api('POST','/api/return',{machine:m,used:used,ids:list.map(function(x){return x.id})})
+    .then(function(d){
+      server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
+      var back=plan.filter(function(x){return x.back});
+      mach={ret:null,used:'',busy:false,err:'',msg:'Returned to rack from '+m+': '+(back.length?back.map(function(x){return fmt(x.back)+' to '+fromLoc(x.p).loc}).join(', '):'nothing left over')+'. '+fmt(used)+' used.'};
+      render();loadLog();
+    })
+    .catch(function(x){mach.busy=false;if(x.silent)return;mach.err=x.message;reloadLatest()});
+}
+var RANGES=[['today','Today'],['week','Last week'],['month','Last month'],['year','Last year',1],['all','All time',1]];
+function loadLog(){
+  var since=new Date();since.setHours(0,0,0,0);
+  return api('GET','/api/transfers?range='+tlog.range+'&since='+since.getTime()).then(function(j){tlog.entries=j.entries;tlog.err='';if(ui.tab==='machines'){var el=document.getElementById('tlog');if(el)el.outerHTML=logPanel()}})
+    .catch(function(x){if(!x.silent){tlog.err=x.message;var el=document.getElementById('tlog');if(el)el.outerHTML=logPanel()}});
+}
+function logPanel(){
+  var h='<div class="panel" id="tlog"><div class="panel-h"><h3>Transfer Log</h3><div class="chips">';
+  RANGES.forEach(function(r){if(r[2]&&!isAdmin())return;h+='<button class="chip sm" data-act="lrange" data-v="'+r[0]+'" aria-pressed="'+(tlog.range===r[0])+'">'+r[1]+'</button>'});
+  h+='</div></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Part Number</th><th class="r">Qty</th><th>Locations</th><th>Machine</th></tr></thead><tbody>';
+  if(tlog.err)h+='<tr><td colspan="7" class="err">'+esc(tlog.err)+'</td></tr>';
+  else if(!tlog.entries)h+='<tr><td colspan="7" class="empty-note">Loading…</td></tr>';
+  else if(!tlog.entries.length)h+='<tr><td colspan="7" class="empty-note">Nothing in this period.</td></tr>';
+  (tlog.entries||[]).forEach(function(e){
+    var ret=e.kind==='return',pals=Array.isArray(e.pallets)?e.pallets:[];
+    var pns={};if(ret)pals.forEach(function(x){pns[x.partNumber||x.part]=1});else pns[e.partNumber||e.part]=1;
+    var locs=pals.map(function(x){return x.loc+(ret?(x.qty?' ('+fmt(x.qty)+')':' (used up)'):'')}).join(', ');
+    h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+(ret?'Return to rack · '+fmt(e.used)+' used':'Transfer · '+fmt(e.requested)+' requested')+'</td><td>'+esc(Object.keys(pns).join(', '))+'</td><td class="r num">'+fmt(e.qty)+'</td><td class="detail">'+esc(locs)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>';
+  });
+  return h+'</tbody></table></div></div>';
 }
 
 // Every pallet on the racking with its routing number and date received, in racking order.
@@ -408,7 +501,7 @@ function loadAdmin(){
     admin.users=r[0].users;admin.log=r[1].entries;if(ui.tab==='admin')render();
   }).catch(function(x){if(!x.silent){admin.err=x.message;render()}});
 }
-var ACTIONS={'login':'Signed in','login-failed':'Failed sign-in','save':'Saved racking','create-user':'Added user','update-user':'Changed user','delete-user':'Deleted user','change-passkey':'Changed own passkey','transfer':'Transferred material'};
+var ACTIONS={'login':'Signed in','login-failed':'Failed sign-in','save':'Saved racking','create-user':'Added user','update-user':'Changed user','delete-user':'Deleted user','change-passkey':'Changed own passkey','transfer':'Transferred material','return':'Returned to rack','undo-transfers':'Undid all transfers'};
 function adminView(){
   var h='<div class="stack">';
   h+='<form class="panel" id="add-user-form"><div class="panel-h"><h3>Add user</h3></div>'+
@@ -492,7 +585,7 @@ root.addEventListener('click',function(e){
   if(t.tagName==='SELECT'||t.tagName==='INPUT')return;
   if(a!=='delrow'&&a!=='delpart'&&ui.armed){ui.armed=null;if(a!=='tab'&&a!=='row')render()}
   if(a!=='deluser'&&admin.armed){admin.armed=null}
-  if(a==='tab'){ui.tab=t.dataset.v;ui.armed=null;saveUi();render();refocus('tab-'+ui.tab);if(ui.tab==='admin')loadAdmin()}
+  if(a==='tab'){ui.tab=t.dataset.v;ui.armed=null;saveUi();render();refocus('tab-'+ui.tab);if(ui.tab==='admin')loadAdmin();if(ui.tab==='machines')loadLog()}
   else if(a==='row'){var rw=rows()[+t.dataset.v];if(rw)ui.rows[ui.tab]=rw.row;saveUi();render()}
   else if(a==='logout'){api('POST','/api/logout',{}).finally(function(){me=null;showLogin('')})}
   else if(a==='account'){ui.account=!ui.account;render();if(ui.account)refocus('acc-cur')}
@@ -544,6 +637,9 @@ root.addEventListener('click',function(e){
   else if(a==='xprint')printSheet();
   else if(a==='xmachine'){xfer.machine=t.dataset.v;refreshTransfer()}
   else if(a==='xgo')doTransfer();
+  else if(a==='mret'){if(mach.ret===t.dataset.v)mach.ret=null;else{mach.ret=t.dataset.v;mach.used=String(requestedAt(mach.ret))}mach.err='';mach.msg='';render()}
+  else if(a==='mgo')doReturn();
+  else if(a==='lrange'){tlog.range=t.dataset.v;tlog.entries=null;var el=document.getElementById('tlog');if(el)el.outerHTML=logPanel();loadLog()}
 });
 
 root.addEventListener('change',function(e){
@@ -562,6 +658,7 @@ root.addEventListener('change',function(e){
 root.addEventListener('input',function(e){
   var t=e.target,a=t.dataset.act;
   if(a==='xqty'){xfer.qty=t.value;xfer.err='';xfer.msg='';refreshTransfer();return}
+  if(a==='mused'){mach.used=t.value;mach.err='';refreshReturn();return}
   if(!canEdit())return;
   if(a==='qty'){
     var it=lvOf(t).items[+t.dataset.i];if(!it)return;
