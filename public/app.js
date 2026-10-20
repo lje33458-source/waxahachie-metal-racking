@@ -22,7 +22,22 @@ function uid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).sli
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function part(k){for(var i=0;i<state.parts.length;i++)if(state.parts[i].k===k)return state.parts[i];return null}
 function partName(p){return p.number||p.partId||'Unnamed part'}
-function canEdit(){return me&&me.role!=='viewer'}
+// Roles: admin does everything; Material Handler transfers and returns; Shipping and Receiving receives and returns; viewer reads.
+// Only admins edit the racking and Master. The server checks the same rules.
+var ROLE_NAMES={viewer:'Viewer',handler:'Material Handler',shipping:'Shipping and Receiving',admin:'Admin'};
+var CAN={transfer:['admin','handler'],receive:['admin','shipping'],return:['admin','handler','shipping']};
+function can(a){return !!me&&CAN[a].indexOf(me.role)>=0}
+function canEdit(){return isAdmin()}
+// Tabs each role sees, besides the racking sections.
+function tabAllowed(k){
+  if(!me)return false;
+  var r=me.role;
+  if(k==='admin')return r==='admin';
+  if(k==='master')return r==='admin'||r==='viewer';
+  if(k==='transfer')return r!=='shipping';
+  if(k==='receive')return r!=='handler';
+  return true;
+}
 function isAdmin(){return me&&me.role==='admin'}
 function dis(){return canEdit()?'':' disabled'}
 function sec(k){k=k||ui.tab;for(var i=0;i<state.sections.length;i++)if(state.sections[i].key===k)return state.sections[i];return null}
@@ -73,7 +88,7 @@ function start(){
     server=d;state=clone({parts:d.parts,sections:d.sections});dirty=false;newer=null;saveErr='';
     var pref=load('wmr-ui:'+me.id)||{};
     ui.tab=pref.tab||'hq';if(ui.tab==='racking')ui.tab='hq';
-    if((ui.tab==='admin'&&!isAdmin())||(['admin','master','transfer','machines','receive'].indexOf(ui.tab)<0&&!sec()))ui.tab='hq';
+    if((['admin','master','transfer','machines','receive'].indexOf(ui.tab)>=0&&!tabAllowed(ui.tab))||(['admin','master','transfer','machines','receive'].indexOf(ui.tab)<0&&!sec()))ui.tab='hq';
     ui.rows=pref.rows||{};if(pref.row!=null&&ui.rows.hq==null)ui.rows.hq=pref.row;
     if(location.hash==='#master')ui.tab='master';
     var draft=load('wmr-draft:'+me.id);
@@ -112,7 +127,7 @@ function render(){
   var T=totals();
   root.innerHTML=
     '<header class="top"><div class="brand"><div class="mark" aria-hidden="true"></div><div><h1>Americase Visual Inventory</h1></div></div>'+
-    '<div class="top-right"><div class="userbar">Signed in as <b>'+esc(me.id)+'</b> <span class="role '+esc(me.role)+'">'+esc(me.role)+'</span> · '+
+    '<div class="top-right"><div class="userbar">Signed in as <b>'+esc(me.id)+'</b> <span class="role '+esc(me.role)+'">'+esc(ROLE_NAMES[me.role]||me.role)+'</span> · '+
       '<button class="linkbtn" data-act="account">Change passkey</button> · <button class="linkbtn" data-act="logout">Sign out</button></div>'+
     '<div class="savebar" id="savebar"></div></div></header>'+
     (ui.account?accountPanel():'')+
@@ -120,9 +135,9 @@ function render(){
       (dirty?'Your unsaved changes were made on the older version. Load the latest to continue; your edits will be discarded.':'')+'</span>'+
       '<button class="btn" data-act="reload">Load latest</button></div>':'')+
     '<nav class="tabs" role="tablist">'+
-      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('receive','Receive Material')+tab('transfer','Transfer Material')+tab('machines','Machine')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
+      state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+['receive','Receive Material','transfer','Transfer Material','machines','Machine','master','Master','admin','Admin'].reduce(function(o,v,i,a){return i%2||!tabAllowed(v)?o:o+tab(v,a[i+1])},'')+
     '</nav>'+
-    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='receive'?receiveView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T)+(isAdmin()?palletSheet():''))+'</section>';
+    '<section id="view">'+(!tabAllowed(ui.tab)&&!sec(ui.tab)?'':ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='receive'?receiveView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T)+(isAdmin()?palletSheet():''))+'</section>';
   renderStatus();
 }
 function tab(v,label){return '<button class="tab" role="tab" id="tab-'+v+'" aria-selected="'+(ui.tab===v)+'" data-act="tab" data-v="'+v+'">'+label+'</button>'}
@@ -308,8 +323,8 @@ function transferResults(){
   if(!enough)return h;
   h+='<div class="panel"><div class="panel-h"><h3>Send to machine</h3><p>'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · '+fmt(P.total)+' × '+esc(partName(p))+'</p></div><div class="machines">';
   MACHINES.forEach(function(m){h+='<button class="machine" data-act="xmachine" data-v="'+m+'" aria-pressed="'+(xfer.machine===m)+'">'+m+'</button>'});
-  h+='</div><div class="tablefoot'+(xfer.machine&&canEdit()&&!dirty?' confirm-step':'')+'">';
-  if(!canEdit())h+='<p class="dim">Your account can view but not transfer material.</p>';
+  h+='</div><div class="tablefoot'+(xfer.machine&&can('transfer')&&!dirty?' confirm-step':'')+'">';
+  if(!can('transfer'))h+='<p class="dim">Your account can view but not transfer material.</p>';
   else if(dirty)h+='<p class="err">Save or undo your racking changes before transferring.</p>';
   else h+='<button class="btn primary" data-act="xgo"'+(!xfer.machine||xfer.busy?' disabled':'')+'>'+(xfer.busy?'Transferring…':xfer.machine?'Transfer '+P.list.length+' pallet'+(P.list.length>1?'s':'')+' to '+xfer.machine:'Choose a machine')+'</button>';
   h+='</div></div>';
@@ -362,7 +377,7 @@ function printSheet(){
 function refreshTransfer(){var el=document.getElementById('xf-results');if(el)el.innerHTML=transferResults()}
 function doTransfer(){
   var q=xferQty(),P=picked(pallets(xfer.part));
-  if(!q||P.total<q||!xfer.machine||xfer.busy||dirty||!canEdit())return;
+  if(!q||P.total<q||!xfer.machine||xfer.busy||dirty||!can('transfer'))return;
   xfer.busy=true;xfer.err='';xfer.msg='';refreshTransfer();
   var m=xfer.machine,name=partName(part(xfer.part)||{});
   api('POST','/api/transfer',{part:xfer.part,requested:q,machine:m,pallets:P.list.map(function(x){return {section:x.section,row:x.row,rack:x.rack,level:x.level,item:x.item,qty:x.qty}})})
@@ -444,8 +459,8 @@ function recvBody(){
   if(recv.err)h+='<p class="err" role="alert">'+esc(recv.err)+'</p>';
   if(S.length<n)return h;
   var total=0,items=S.map(function(x,i){total+=recvQty(i);return {section:x.section,row:x.row,addr:x.addr,loc:x.loc,pn:partName(p),qty:recvQty(i),routing:recv.routings[i]||'',received:recv.date}});
-  h+='<div class="panel"><div class="panel-h"><h3>Put away</h3><p>'+n+' pallet'+(n>1?'s':'')+' · '+fmt(total)+' × '+esc(partName(p))+'</p></div><div class="tablefoot'+(canEdit()&&!dirty?' confirm-step':'')+'">';
-  if(!canEdit())h+='<p class="dim">Your account can view but not receive material.</p>';
+  h+='<div class="panel"><div class="panel-h"><h3>Put away</h3><p>'+n+' pallet'+(n>1?'s':'')+' · '+fmt(total)+' × '+esc(partName(p))+'</p></div><div class="tablefoot'+(can('receive')&&!dirty?' confirm-step':'')+'">';
+  if(!can('receive'))h+='<p class="dim">Your account can view but not receive material.</p>';
   else if(dirty)h+='<p class="err">Save or undo your racking changes before receiving material.</p>';
   else h+='<button class="btn primary" data-act="rgo"'+(recv.busy?' disabled':'')+'>'+(recv.busy?'Receiving…':'Receive '+n+' pallet'+(n>1?'s':'')+' onto the racking')+'</button>';
   h+='</div></div>';
@@ -456,7 +471,7 @@ function recvBody(){
 function refreshRecv(qtys){if(qtys){var q=document.getElementById('rv-qtys');if(q)q.innerHTML=recvQtys()}var el=document.getElementById('rv-body');if(el)el.innerHTML=recvBody()}
 function doReceive(){
   var n=recvCount(),S=recvSpots();
-  if(!n||!recv.confirmed||!recvReady()||S.length<n||recv.busy||dirty||!canEdit())return;
+  if(!n||!recv.confirmed||!recvReady()||S.length<n||recv.busy||dirty||!can('receive'))return;
   recv.busy=true;recv.err='';refreshRecv();
   var name=partName(part(recv.part)||{});
   api('POST','/api/receive',{part:recv.part,received:recv.date,pallets:S.map(function(x,i){return {section:x.section,row:x.row,rack:x.rack,level:x.level,qty:recvQty(i),routing:recv.routings[i]||''}})})
@@ -491,7 +506,7 @@ function machinesView(){
   MACHINES.forEach(function(m){
     var list=atMachine(m),tot=list.reduce(function(t,x){return t+num(x.qty)},0);
     h+='<div class="mcard'+(mach.ret===m?' on':'')+'"><div class="mcard-h"><h3>'+m+'</h3>'+
-      (list.length&&canEdit()?'<button class="btn'+(mach.ret===m?' primary':'')+'" data-act="mret" data-v="'+m+'">'+(mach.ret===m?'Close return':'Return to Rack')+'</button>':'')+
+      (list.length&&can('return')?'<button class="btn'+(mach.ret===m?' primary':'')+'" data-act="mret" data-v="'+m+'">'+(mach.ret===m?'Close return':'Return to Rack')+'</button>':'')+
       '</div><div class="mpals">';
     if(!list.length)h+='<p class="dim">No material at this machine.</p>';
     list.forEach(function(x){var p=part(x.part),f=fromLoc(x);
@@ -538,7 +553,7 @@ function returnBody(){
     h+='<tr><td><span class="tagl inline">'+esc(f.loc)+'</span></td><td>'+esc(p?partName(p):'Removed part')+'</td><td class="num">'+esc(x.p.routing)+'</td><td class="r num">'+fmt(num(x.p.qty))+'</td><td class="r num">'+fmt(x.used)+'</td><td class="r num"><b>'+(x.back?fmt(x.back):'<span class="trash">Used</span>')+'</b></td></tr>'});
   h+='</tbody><tfoot><tr><td colspan="3">Total</td><td class="r num">'+fmt(total)+'</td><td class="r num">'+fmt(used)+'</td><td class="r num">'+fmt(back)+'</td></tr></tfoot></table></div>';
   if(mach.err)h+='<p class="err" role="alert" style="padding:10px 14px 0">'+esc(mach.err)+'</p>';
-  h+='<div class="tablefoot'+(canEdit()&&!dirty?' confirm-step':'')+'">';
+  h+='<div class="tablefoot'+(can('return')&&!dirty?' confirm-step':'')+'">';
   if(dirty)h+='<p class="err">Save or undo your racking changes before returning material.</p>';
   else h+='<button class="btn primary" data-act="mgo"'+(mach.busy?' disabled':'')+'>'+(mach.busy?'Working…':back?'Return to rack'+(trash?' and move '+trash+' pallet'+(trash>1?'s':'')+' to Used':''):'Move '+(trash>1?trash+' pallets':'pallet')+' to Used')+'</button> <button class="btn ghost" data-act="mret" data-v="'+m+'">Cancel</button>';
   h+='</div></div>';
@@ -550,7 +565,7 @@ function returnBody(){
 function refreshReturn(){var el=document.getElementById('mr-body');if(el)el.innerHTML=returnBody()}
 function doReturn(){
   var m=mach.ret,list=atMachine(m),used=Number(mach.used),plan=returnPlan(list,used);
-  if(!m||!plan||!mach.confirmed||mach.busy||dirty||!canEdit()||mach.used==='')return;
+  if(!m||!plan||!mach.confirmed||mach.busy||dirty||!can('return')||mach.used==='')return;
   mach.busy=true;mach.err='';refreshReturn();
   api('POST','/api/return',{machine:m,used:used,ids:list.map(function(x){return x.id})})
     .then(function(d){
@@ -648,7 +663,7 @@ function adminView(){
   var h='<div class="stack">';
   h+='<form class="panel" id="add-user-form"><div class="panel-h"><h3>Add user</h3></div>'+
     '<div class="formrow"><div class="field"><label for="nu-id">User ID</label><input id="nu-id" autocomplete="off" autocapitalize="none" spellcheck="false" required pattern="[A-Za-z0-9._\\-]{2,40}" title="2–40 letters, numbers, dots, dashes or underscores"></div>'+
-    '<div class="field"><label for="nu-role">Role</label><select id="nu-role"><option value="editor">Editor · can edit and save</option><option value="viewer">Viewer · read only</option><option value="admin">Admin · can also manage users</option></select></div>'+
+    '<div class="field"><label for="nu-role">Role</label><select id="nu-role"><option value="handler">Material Handler · transfers to and from machines</option><option value="shipping">Shipping and Receiving · receives material, returns from machines</option><option value="viewer">Viewer · read only</option><option value="admin">Admin · everything, including racking edits, Master and users</option></select></div>'+
     '<div class="field grow"><label for="nu-pk">Passkey</label><div class="pkrow"><input id="nu-pk" autocomplete="new-password" minlength="8" required spellcheck="false"><button class="btn" type="button" data-act="genpk" data-for="nu-pk">Generate</button></div></div>'+
     '<button class="btn primary" type="submit">Add user</button></div>'+
     (admin.created?'<div class="notice" role="status"><span>Give <b>'+esc(admin.created.id)+'</b> this passkey. The app keeps only a scrambled copy, so it cannot be shown again.</span><code>'+esc(admin.created.pk)+'</code><button class="btn sm" type="button" data-act="copy" data-v="'+esc(admin.created.pk)+'">Copy</button><button class="btn ghost sm" type="button" data-act="dismiss">Done</button></div>':'')+
@@ -659,7 +674,7 @@ function adminView(){
   admin.users.forEach(function(u){
     var self=u.id===me.id,key=encodeURIComponent(u.id);
     h+='<tr><td><b>'+esc(u.id)+'</b>'+(self?' <span class="dim">(you)</span>':'')+'</td>'+
-      '<td><select data-act="setrole" data-u="'+esc(u.id)+'" aria-label="Role for '+esc(u.id)+'">'+['viewer','editor','admin'].map(function(r){return '<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+r[0].toUpperCase()+r.slice(1)+'</option>'}).join('')+'</select></td>'+
+      '<td><select data-act="setrole" data-u="'+esc(u.id)+'" aria-label="Role for '+esc(u.id)+'">'+['viewer','handler','shipping','admin'].map(function(r){return '<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+ROLE_NAMES[r]+'</option>'}).join('')+'</select></td>'+
       '<td><span class="statuspill '+(u.active?'on':'off')+'">'+(u.active?'Active':'Disabled')+'</span></td>'+
       '<td class="dim">'+esc(when(u.lastLogin))+'</td><td class="dim">'+esc(when(u.createdAt))+(u.createdBy?' by '+esc(u.createdBy):'')+'</td><td>';
     if(admin.resetFor===u.id){
@@ -813,7 +828,7 @@ root.addEventListener('change',function(e){
   if(t.dataset.act==='lrangesel'||t.dataset.act==='lmachsel'){var ls=LOGS[t.dataset.log].st;if(t.dataset.act==='lmachsel'){ls.machine=t.value;var e3=document.getElementById(t.dataset.log);if(e3)e3.outerHTML=logPanel(t.dataset.log);return}ls.range=t.value;ls.entries=null;loadLog(t.dataset.log);return}
   if(t.dataset.act==='rpart'){recv.part=t.value;recv.qtys=[];recv.confirmed=false;recv.err='';recv.msg='';refreshRecv(true);return}
   if(t.dataset.act==='xpart'){xfer.part=t.value;xfer.picks=[];xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer();return}
-  if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+t.value+'.');return}
+  if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+(ROLE_NAMES[t.value]||t.value)+'.');return}
   if(t.dataset.act!=='part'||!canEdit())return;
   var lv=lvOf(t),v=t.value,p=part(v);
   if(t.dataset.i==='new'){if(!v)return;lv.items.push({part:v,qty:p&&p.qtyPerPallet!==''?num(p.qtyPerPallet):'',routing:'',received:today()})}
