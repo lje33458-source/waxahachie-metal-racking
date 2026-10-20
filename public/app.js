@@ -213,11 +213,12 @@ function master(T){
   h+='</tbody><tfoot><tr><td colspan="6">All parts</td><td class="r total num">'+fmt(grand)+'</td><td class="r num">'+T.filled+'</td><td colspan="'+(canEdit()?2:1)+'"></td></tr></tfoot></table></div>'+
      (canEdit()?'<div class="tablefoot"><button class="btn" data-act="addpart">+ Add part</button></div>':'')+'</div>';
   var secs=state.sections.filter(function(s){return s.rows.length});
-  h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th rowspan="2">Part ID</th>';
-  secs.forEach(function(s){h+='<th class="sec" colspan="'+s.rows.length+'">'+esc(s.name)+'</th>'});
-  h+='<th class="r" rowspan="2">Total</th></tr><tr>';
+  var grp=secs.length>1; // section headings only when more than one section is switched on
+  h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th'+(grp?' rowspan="2"':'')+'>Part ID</th>';
+  if(grp){secs.forEach(function(s){h+='<th class="sec" colspan="'+s.rows.length+'">'+esc(s.name)+'</th>'});
+  h+='<th class="r" rowspan="2">Total</th></tr><tr>';}
   secs.forEach(function(s){s.rows.forEach(function(r){h+='<th class="r">Row '+esc(r.row)+'</th>'})});
-  h+='</tr></thead><tbody>';
+  h+=(grp?'':'<th class="r">Total</th>')+'</tr></thead><tbody>';
   state.parts.forEach(function(p){
     h+='<tr><td>'+esc(partName(p))+'</td>';
     secs.forEach(function(s){s.rows.forEach(function(r){var v=T.byRow[rowKey(s,r)][p.k];h+='<td class="r num'+(v?'':' zero')+'">'+(v?fmt(v):'–')+'</td>'})});

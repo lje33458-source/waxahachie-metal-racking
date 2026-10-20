@@ -1,19 +1,22 @@
-/* Layout: a warehouse-floor tool. Row picker on top, each rack drawn as navy uprights with green beams, levels top to bottom; master is a ledger table. */
+/* Layout: a warehouse-floor tool. Row picker on top, each rack drawn as grey steel cantilever racking (a column with arms under each level), levels top to bottom; master is a ledger table. */
 :root{
   --bg:#eef1f5;--surface:#ffffff;--sunk:#f3f5f8;--ink:#0E2841;--muted:#4e5e72;--line:#cfd6df;
   --beam:#51FF92;--beam-ink:#0E2841;--upright:#0E2841;--tag:#0E2841;--tag-ink:#51FF92;
   --ok:#14a058;--warn:#c2410c;--focus:#0E2841;
+  --steel:#8f989f;--steel-hi:#c3c9ce;--steel-lo:#5c656d;
   --display:"Aptos Display","Aptos","Segoe UI",system-ui,sans-serif;
   --body:"Aptos Narrow","Aptos","Arial Narrow","Segoe UI",system-ui,sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0E2841;--surface:#14324f;--sunk:#0b2137;--ink:#e9f0f7;--muted:#a3b3c5;--line:#27486a;
   --beam:#51FF92;--beam-ink:#0E2841;--upright:#4d7aa6;--tag:#51FF92;--tag-ink:#0E2841;
-  --ok:#51FF92;--warn:#ff9466;--focus:#51FF92;color-scheme:dark}}
+  --ok:#51FF92;--warn:#ff9466;--focus:#51FF92;color-scheme:dark;
+  --steel:#9aa3ab;--steel-hi:#d0d5da;--steel-lo:#68717a}}
 :root[data-theme="dark"]{
   --bg:#0E2841;--surface:#14324f;--sunk:#0b2137;--ink:#e9f0f7;--muted:#a3b3c5;--line:#27486a;
   --beam:#51FF92;--beam-ink:#0E2841;--upright:#4d7aa6;--tag:#51FF92;--tag-ink:#0E2841;
-  --ok:#51FF92;--warn:#ff9466;--focus:#51FF92;color-scheme:dark}
+  --ok:#51FF92;--warn:#ff9466;--focus:#51FF92;color-scheme:dark;
+  --steel:#9aa3ab;--steel-hi:#d0d5da;--steel-lo:#68717a}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.4}
 #app-root{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
@@ -75,13 +78,19 @@ h1{font-family:var(--display);font-weight:700;font-size:30px;line-height:1;margi
 .rack-h{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px}
 .rack-h b{font-family:var(--display);font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 .rack-h span{color:var(--muted);font-size:13px}
-.frame{position:relative;background:var(--surface);border-left:8px solid var(--upright);border-right:8px solid var(--upright)}
-.frame::before,.frame::after{content:"";position:absolute;top:0;bottom:0;width:2px;
-  background:repeating-linear-gradient(transparent 0 7px,var(--surface) 7px 12px);opacity:.55}
-.frame::before{left:-5px}.frame::after{right:-5px}
-.level{display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;padding:10px 10px 10px 8px;border-bottom:5px solid var(--beam)}
+.frame{position:relative;margin-left:20px;padding-top:4px}
+/* cantilever column */
+.frame::before{content:"";position:absolute;left:-20px;top:-8px;bottom:0;width:20px;border-radius:3px 3px 0 0;
+  background:radial-gradient(circle,var(--steel-lo) 0 2px,transparent 2.5px) center 6px/20px 22px repeat-y,
+    linear-gradient(90deg,var(--steel-lo),var(--steel-hi) 40%,var(--steel) 70%,var(--steel-lo))}
+/* arm under each level, tapering to a raised end stop */
+.level{position:relative;background:var(--surface);display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;padding:10px 10px 10px 8px;margin-bottom:8px}
+.level::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:8px;
+  background:linear-gradient(var(--steel-hi),var(--steel) 55%,var(--steel-lo));clip-path:polygon(0 0,100% 0,100% 55%,0 100%)}
+.level::before{content:"";position:absolute;right:0;bottom:-4px;width:6px;height:14px;border-radius:2px 2px 0 0;background:var(--steel-lo)}
+.level.gap::before,.level.gap::after{display:none}
 .level.empty{background:var(--sunk)}
-.level.gap{background:repeating-linear-gradient(45deg,var(--sunk) 0 8px,transparent 8px 16px);border-bottom-color:transparent;min-height:56px}
+.level.gap{background:repeating-linear-gradient(45deg,var(--sunk) 0 8px,transparent 8px 16px);min-height:56px}
 .level.gap .tagl{background:transparent;color:var(--muted);border:1px dashed var(--line)}
 .gapnote{color:var(--muted);font-size:13px;align-self:center}
 .addr{display:grid;align-content:start;gap:3px}
@@ -94,7 +103,7 @@ h1{font-family:var(--display);font-weight:700;font-size:30px;line-height:1;margi
 .line input:disabled{opacity:.4}
 .x{border:0;background:none;color:var(--muted);cursor:pointer;height:30px;border-radius:5px;font-size:18px;line-height:1}
 .x:hover{color:var(--warn);background:var(--sunk)}
-.floor{height:10px;background:repeating-linear-gradient(45deg,var(--line) 0 6px,transparent 6px 12px)}
+.floor{height:12px;margin-top:6px;background:linear-gradient(var(--steel-hi),var(--steel) 50%,var(--steel-lo));clip-path:polygon(0 0,40px 0,100% 45%,100% 100%,0 100%)}
 
 /* master */
 .kpis{display:flex;flex-wrap:wrap;gap:10px 28px}
