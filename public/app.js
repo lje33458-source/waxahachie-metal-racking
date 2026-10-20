@@ -520,40 +520,42 @@ function machinesView(){
 function returnPanel(){
   var m=mach.ret,list=atMachine(m),total=list.reduce(function(t,x){return t+num(x.qty)},0);
   var h='<div class="panel"><div class="panel-h"><h3>Return to rack · '+m+'</h3><p>Enter how much was used at '+m+'. That comes off the oldest pallets first, and what is left on each pallet goes back to the spot it came from.</p></div>';
-  h+='<div class="formrow"><div class="field"><label for="mr-used">Quantity used</label><input id="mr-used" class="num" type="number" inputmode="numeric" min="0" max="'+total+'" step="1" data-act="mused" value="'+esc(mach.used)+'"></div><p class="dim" style="margin:0 0 10px">'+fmt(total)+' sheets at '+m+'</p></div></div>';
+  h+='<div class="formrow"><div class="field"><label for="mr-used">Quantity used</label><input id="mr-used" class="num" type="number" inputmode="numeric" min="0" max="'+total+'" step="1" data-act="mused" value="'+esc(mach.used)+'"></div><p class="dim" style="margin:0 0 10px">'+fmt(total)+' sheets at '+m+'</p>'+
+    '<button class="btn primary" data-act="mconfirm">Confirm</button></div><p class="err" id="mr-cerr" role="alert" style="padding:0 14px 12px"></p></div>';
   return h+'<div id="mr-body" class="stack">'+returnBody()+'</div>';
 }
 // The plan, the confirm button and the print sheet: redrawn as the quantity used is typed.
 function returnBody(){
   var m=mach.ret,list=atMachine(m),total=list.reduce(function(t,x){return t+num(x.qty)},0);
   var used=mach.used===''?NaN:Number(mach.used),plan=returnPlan(list,used);
-  if(!plan)return '<p class="err">Enter a quantity from 0 to '+fmt(total)+'.</p>';
-  var h='<div class="panel"><div class="panel-h"><h3>Back to the racking or Trash</h3></div><div class="scroll"><table><thead><tr><th>Pallet from</th><th>Part Number</th><th>Routing #</th><th class="r">At machine</th><th class="r">Used</th><th class="r">Return to rack</th></tr></thead><tbody>';
+  // Nothing moves until the quantity consumed is confirmed; editing it asks for Confirm again.
+  if(!mach.confirmed||!plan)return '<p class="empty-note">Enter the quantity used at '+esc(m)+' and press Confirm.</p>';
+  var h='<div class="panel"><div class="panel-h"><h3>Back to Racking</h3></div><div class="scroll"><table><thead><tr><th>Pallet from</th><th>Part Number</th><th>Routing #</th><th class="r">At machine</th><th class="r">Used</th><th class="r">Quantity to Return</th></tr></thead><tbody>';
   var back=0,trash=plan.filter(function(x){return !x.back}).length;
   plan.forEach(function(x){var p=part(x.p.part),f=fromLoc(x.p);back+=x.back;
-    h+='<tr><td><span class="tagl inline">'+esc(f.loc)+'</span></td><td>'+esc(p?partName(p):'Removed part')+'</td><td class="num">'+esc(x.p.routing)+'</td><td class="r num">'+fmt(num(x.p.qty))+'</td><td class="r num">'+fmt(x.used)+'</td><td class="r num"><b>'+(x.back?fmt(x.back):'<span class="trash">Used up · discard to Trash</span>')+'</b></td></tr>'});
+    h+='<tr><td><span class="tagl inline">'+esc(f.loc)+'</span></td><td>'+esc(p?partName(p):'Removed part')+'</td><td class="num">'+esc(x.p.routing)+'</td><td class="r num">'+fmt(num(x.p.qty))+'</td><td class="r num">'+fmt(x.used)+'</td><td class="r num"><b>'+(x.back?fmt(x.back):'<span class="trash">Used</span>')+'</b></td></tr>'});
   h+='</tbody><tfoot><tr><td colspan="3">Total</td><td class="r num">'+fmt(total)+'</td><td class="r num">'+fmt(used)+'</td><td class="r num">'+fmt(back)+'</td></tr></tfoot></table></div>';
   if(mach.err)h+='<p class="err" role="alert" style="padding:10px 14px 0">'+esc(mach.err)+'</p>';
   h+='<div class="tablefoot">';
   if(dirty)h+='<p class="err">Save or undo your racking changes before returning material.</p>';
-  else h+='<button class="btn primary" data-act="mgo"'+(mach.busy?' disabled':'')+'>'+(mach.busy?'Working…':back?'Confirm return to rack'+(trash?' and discard '+trash+' pallet'+(trash>1?'s':''):''):'Discard '+(trash>1?trash+' pallets':'pallet')+' to Trash')+'</button> <button class="btn ghost" data-act="mret" data-v="'+m+'">Cancel</button>';
+  else h+='<button class="btn primary" data-act="mgo"'+(mach.busy?' disabled':'')+'>'+(mach.busy?'Working…':back?'Return to rack'+(trash?' and move '+trash+' pallet'+(trash>1?'s':'')+' to Used':''):'Move '+(trash>1?trash+' pallets':'pallet')+' to Used')+'</button> <button class="btn ghost" data-act="mret" data-v="'+m+'">Cancel</button>';
   h+='</div></div>';
   var items=plan.filter(function(x){return x.back}).map(function(x){var p=part(x.p.part),f=fromLoc(x.p);return {section:f.section,row:f.row,addr:f.addr,loc:f.loc,pn:p?partName(p):'',qty:x.back,routing:x.p.routing,received:x.p.received}});
   h+='<div class="panel"><div class="panel-h"><h3>Ready for print</h3><p>Return sheet: put each pallet back in the spot marked. It fits on one 8.5 × 11 in page.</p><button class="btn" data-act="xprint">Print</button></div><div class="sheet-wrap">'+
-    sheet({title:back?'Return to rack':'Discard to Trash',dir:'From',machine:m,sub:'Used at '+esc(m)+': <b>'+fmt(used)+'</b> of '+fmt(total)+' sheets. '+(back?'Return each pallet below to the spot it came from.':'')+(trash?' <b>'+trash+' used-up pallet'+(trash>1?'s':'')+' go'+(trash>1?'':'es')+' to Trash.</b>':''),items:items,foot:items.length+' pallet'+(items.length===1?'':'s')+' back to the racking',footQty:back})+'</div></div>';
+    sheet({title:back?'Return to rack':'Pallets used',dir:'From',machine:m,sub:'Used at '+esc(m)+': <b>'+fmt(used)+'</b> of '+fmt(total)+' sheets. '+(back?'Return each pallet below to the spot it came from.':'')+(trash?' <b>'+trash+' used-up pallet'+(trash>1?'s':'')+' go'+(trash>1?'':'es')+' to Used.</b>':''),items:items,foot:items.length+' pallet'+(items.length===1?'':'s')+' back to the racking',footQty:back})+'</div></div>';
   return h;
 }
 function refreshReturn(){var el=document.getElementById('mr-body');if(el)el.innerHTML=returnBody()}
 function doReturn(){
   var m=mach.ret,list=atMachine(m),used=Number(mach.used),plan=returnPlan(list,used);
-  if(!m||!plan||mach.busy||dirty||!canEdit()||mach.used==='')return;
+  if(!m||!plan||!mach.confirmed||mach.busy||dirty||!canEdit()||mach.used==='')return;
   mach.busy=true;mach.err='';refreshReturn();
   api('POST','/api/return',{machine:m,used:used,ids:list.map(function(x){return x.id})})
     .then(function(d){
       server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
       var back=plan.filter(function(x){return x.back});
       var tr=plan.length-back.length;
-      mach={ret:null,used:'',busy:false,err:'',msg:m+': '+(back.length?'returned '+back.map(function(x){return fmt(x.back)+' to '+fromLoc(x.p).loc}).join(', '):'nothing returned to the racking')+(tr?'; '+tr+' used-up pallet'+(tr>1?'s':'')+' discarded to Trash':'')+'. '+fmt(used)+' used.'};
+      mach={ret:null,used:'',busy:false,err:'',msg:m+': '+(back.length?'returned '+back.map(function(x){return fmt(x.back)+' to '+fromLoc(x.p).loc}).join(', '):'nothing returned to the racking')+(tr?'; '+tr+' used-up pallet'+(tr>1?'s':'')+' moved to Used':'')+'. '+fmt(used)+' used.'};
       render();loadLog();
     })
     .catch(function(x){mach.busy=false;if(x.silent)return;mach.err=x.message;reloadLatest()});
@@ -597,7 +599,7 @@ function logPanel(id){
       var ret=e.kind==='return';
       if(ret)pals.forEach(function(x){pns[x.partNumber||x.part]=1});else pns[e.partNumber||e.part]=1;
       var tr=ret?pals.filter(function(x){return !x.qty}).length:0;
-      var rack=esc(pals.filter(function(x){return !ret||x.qty}).map(function(x){return x.loc+(ret?' ('+fmt(x.qty)+')':'')}).concat(tr?['Trash ('+tr+' pallet'+(tr>1?'s':'')+')']:[]).join(', ')),m='<b>'+esc(e.machine)+'</b>';
+      var rack=esc(pals.filter(function(x){return !ret||x.qty}).map(function(x){return x.loc+(ret?' ('+fmt(x.qty)+')':'')}).concat(tr?['Used ('+tr+' pallet'+(tr>1?'s':'')+')']:[]).join(', ')),m='<b>'+esc(e.machine)+'</b>';
       from=ret?m:rack;to=ret?rack:m;
     }
     h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+(e.kind==='receive'?'Receive':'Transfer')+'</td><td>'+esc(Object.keys(pns).join(', '))+'</td><td class="r num">'+fmt(e.qty)+'</td>'+
@@ -775,8 +777,13 @@ root.addEventListener('click',function(e){
   else if(a==='xprint')printSheet();
   else if(a==='xmachine'){xfer.machine=t.dataset.v;refreshTransfer()}
   else if(a==='xgo')doTransfer();
-  else if(a==='mret'){if(mach.ret===t.dataset.v)mach.ret=null;else{mach.ret=t.dataset.v;mach.used=String(requestedAt(mach.ret))}mach.err='';mach.msg='';render()}
+  else if(a==='mret'){if(mach.ret===t.dataset.v)mach.ret=null;else{mach.ret=t.dataset.v;mach.used=String(requestedAt(mach.ret))}mach.confirmed=false;mach.err='';mach.msg='';render()}
   else if(a==='mgo')doReturn();
+  else if(a==='mconfirm'){
+    var tot=atMachine(mach.ret).reduce(function(t2,x){return t2+num(x.qty)},0),uv=Number(mach.used),ce2=document.getElementById('mr-cerr');
+    if(mach.used===''||!isFinite(uv)||uv<0||uv>tot){mach.confirmed=false;if(ce2)ce2.textContent='Enter a quantity used from 0 to '+fmt(tot)+'.';refreshReturn();return}
+    if(ce2)ce2.textContent='';mach.confirmed=true;refreshReturn();
+  }
   else if(a==='rspot'){var si=recv.spots.indexOf(t.dataset.v);if(si>=0)recv.spots.splice(si,1);else if(recv.spots.length<recvCount())recv.spots.push(t.dataset.v);recv.err='';recv.msg='';refreshRecv()}
   else if(a==='rgo')doReceive();
   else if(a==='lrange'){var lst=LOGS[t.dataset.log].st;lst.range=t.dataset.v;lst.entries=null;var el=document.getElementById(t.dataset.log);if(el)el.outerHTML=logPanel(t.dataset.log);loadLog(t.dataset.log)}
@@ -821,7 +828,7 @@ root.addEventListener('input',function(e){
   if(a==='rqty'){recv.qtys[+t.dataset.i]=t.value;var ce0=document.getElementById('rv-cerr');if(ce0)ce0.textContent='';refreshRecv();return}
   if(a==='rrt'){recv.routings[+t.dataset.i]=t.value;var ce0=document.getElementById('rv-cerr');if(ce0)ce0.textContent='';refreshRecv();return}
   if(a==='rdate'){recv.date=t.value||today();refreshRecv();return}
-  if(a==='mused'){mach.used=t.value;mach.err='';refreshReturn();return}
+  if(a==='mused'){mach.used=t.value;mach.err='';if(mach.confirmed){mach.confirmed=false;refreshReturn()}var ce1=document.getElementById('mr-cerr');if(ce1)ce1.textContent='';return}
   if(!canEdit())return;
   if(a==='qty'){
     var it=lvOf(t).items[+t.dataset.i];if(!it)return;
