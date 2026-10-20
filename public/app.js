@@ -214,6 +214,7 @@ function master(T){
   });
   h+='</tbody><tfoot><tr><td colspan="5">All parts</td><td class="r total num">'+fmt(grand)+'</td><td class="r num">'+T.filled+'</td><td colspan="'+(canEdit()?2:1)+'"></td></tr></tfoot></table></div>'+
      (canEdit()?'<div class="tablefoot"><button class="btn" data-act="addpart">+ Add part</button></div>':'')+'</div>';
+  h+=palletSheet();
   var secs=state.sections.filter(function(s){return s.rows.length});
   var grp=secs.length>1; // section headings only when more than one section is switched on
   h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th'+(grp?' rowspan="2"':'')+'>Part Number</th>';
@@ -238,11 +239,15 @@ function pallets(k){
     lv.items.forEach(function(it,i){
       if(it.part!==k||!(num(it.qty)>0))return;
       var loc=r.row+'-'+rk.rack+'-'+lv.level;
-      out.push({key:s.key+'|'+loc+'|'+i,section:s.key,row:r.row,rack:rk.rack,level:lv.level,item:i,qty:num(it.qty),addr:loc,loc:(multi?s.name+' ':'')+loc});
+      out.push({key:s.key+'|'+loc+'|'+i,section:s.key,row:r.row,rack:rk.rack,level:lv.level,item:i,qty:num(it.qty),addr:loc,loc:(multi?s.name+' ':'')+loc,routing:it.routing||'',received:it.received||''});
     });
   })})})});
-  return out;
+  // Oldest received first; pallets without a date go last.
+  return out.map(function(x,i){x.n=i;return x}).sort(function(a,b){return (a.received||'9999')<(b.received||'9999')?-1:(a.received||'9999')>(b.received||'9999')?1:a.n-b.n});
 }
+var MAX_PALLETS=2;
+function day(d){if(!d)return '–';var p=d.split('-');return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString([], {month:'short',day:'numeric',year:'numeric'})}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function xferQty(){var n=Number(xfer.qty);return xfer.qty!==''&&isFinite(n)&&n>0?n:0}
 // The picked pallets that still exist, in the order they were picked, and their total.
 function picked(list){
@@ -252,7 +257,7 @@ function picked(list){
   return {list:out,total:out.reduce(function(t,x){return t+x.qty},0)};
 }
 function transferView(){
-  var h='<div class="stack"><div class="panel"><div class="panel-h"><h3>Transfer material</h3><p>Pick the material and quantity, then choose one green pallet or enough yellow pallets to cover it. Whole pallets are moved.</p></div>';
+  var h='<div class="stack"><div class="panel"><div class="panel-h"><h3>Transfer material</h3><p>Pick the material and quantity, then choose one green pallet or two pallets that add up to it. Oldest received is listed first. Whole pallets are moved.</p></div>';
   h+='<div class="formrow"><div class="field grow"><label for="xf-part">Material type</label><select id="xf-part" data-act="xpart"><option value="">Select part number</option>';
   state.parts.forEach(function(p){h+='<option value="'+esc(p.k)+'"'+(xfer.part===p.k?' selected':'')+'>'+esc(partName(p))+'</option>'});
   h+='</select></div><div class="field"><label for="xf-qty">Quantity requested</label><input id="xf-qty" class="num" type="number" inputmode="numeric" min="1" step="1" data-act="xqty" value="'+esc(xfer.qty)+'"></div></div>';
@@ -269,23 +274,31 @@ function transferResults(){
   if(q){
     var pct=Math.min(100,Math.round(P.total/q*100));
     h+='<div class="tally'+(enough?' ok':'')+'"><span class="label">Selected / requested</span><b class="num">'+fmt(P.total)+' / '+fmt(q)+'</b>'+
-      '<span class="meter"><i style="width:'+pct+'%"></i></span><span class="dim">'+(enough?'Enough selected.':fmt(q-P.total)+' more needed.')+'</span></div>';
+      '<span class="meter"><i style="width:'+pct+'%"></i></span><span class="dim">'+(enough?'Enough selected.':fmt(q-P.total)+' more needed.')+'</span>'+
+      (P.list.length===1&&!enough&&!list.some(function(x){return x.key!==P.list[0].key&&P.total+x.qty>=q})?'<span class="err">No other pallet makes up the rest. Remove '+esc(P.list[0].loc)+' and pick another.</span>':'')+'</div>';
   }
-  h+='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets cover '+fmt(q)+' on their own. Yellow pallets have less and can be combined.':'Enter the quantity requested to choose pallets.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Part Number</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
-  if(!list.length)h+='<tr><td colspan="4" class="empty-note">No pallets of this material are on the racking.</td></tr>';
-  list.forEach(function(x){
-    var sel=xfer.picks.indexOf(x.key)>=0,cls=q?(x.qty>=q?'go':'part'):'';
-    h+='<tr class="'+cls+(sel?' picked':'')+'"'+(q?' data-act="xpick" data-v="'+esc(x.key)+'"':'')+'><td>'+
-      (q?'<button class="pick" aria-pressed="'+sel+'" aria-label="'+(sel?'Remove ':'Add ')+esc(x.loc)+'"></button>':'')+'</td>'+
-      '<td>'+esc(partName(p))+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td class="r num"><b>'+fmt(x.qty)+'</b></td></tr>';
+  h+='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets cover '+fmt(q)+' on their own. Yellow pallets have less; pick a second pallet to make up the rest. Red pallets can\'t make up the rest. Up to '+MAX_PALLETS+' pallets.':'Enter the quantity requested to choose pallets.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Date received</th><th>Part Number</th><th>Routing #</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
+  if(!list.length)h+='<tr><td colspan="6" class="empty-note">No pallets of this material are on the racking.</td></tr>';
+  list.forEach(function(x,i){
+    // Unpicked pallets can be added while fewer than MAX_PALLETS are picked, the request isn't met yet, and this pallet would meet it as the last pick.
+    var sel=xfer.picks.indexOf(x.key)>=0,n=P.list.length,cls='',can=false;
+    if(q){
+      if(sel){cls=x.qty>=q?'go':'part';can=true}
+      else if(enough||n>=MAX_PALLETS)cls='off';
+      else if(n===MAX_PALLETS-1&&P.total+x.qty<q)cls='no';
+      else{cls=x.qty>=q?'go':'part';can=true}
+    }
+    h+='<tr class="'+cls+(sel?' picked':'')+'"'+(can?' data-act="xpick" data-v="'+esc(x.key)+'"':'')+'><td>'+
+      (can?'<button class="pick" aria-pressed="'+sel+'" aria-label="'+(sel?'Remove ':'Add ')+esc(x.loc)+'"></button>':'')+'</td>'+
+      '<td class="num">'+esc(day(x.received))+(i<2?' <span class="rec">Recommended</span>':'')+'</td><td>'+esc(partName(p))+'</td><td class="num">'+esc(x.routing)+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td class="r num"><b>'+fmt(x.qty)+'</b></td></tr>';
   });
   h+='</tbody></table></div></div>';
   if(xfer.err)h+='<p class="err" role="alert">'+esc(xfer.err)+'</p>';
   if(!q)return h;
-  h+='<div class="panel"><div class="panel-h"><h3>Selected pallets</h3></div><div class="scroll"><table><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th class="r">Quantity</th><th></th></tr></thead><tbody>';
-  if(!P.list.length)h+='<tr><td colspan="5" class="empty-note">No pallets selected yet. Pick pallets from the table above.</td></tr>';
-  P.list.forEach(function(x,i){h+='<tr><td class="num">'+(i+1)+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td>'+esc(partName(p))+'</td><td class="r num">'+fmt(x.qty)+'</td><td class="r"><button class="btn ghost sm" data-act="xpick" data-v="'+esc(x.key)+'">Remove</button></td></tr>'});
-  h+='</tbody>'+(P.list.length?'<tfoot><tr><td colspan="3">Total of '+P.list.length+' pallet'+(P.list.length>1?'s':'')+'</td><td class="r num">'+fmt(P.total)+' / '+fmt(q)+'</td><td></td></tr></tfoot>':'')+'</table></div></div>';
+  h+='<div class="panel"><div class="panel-h"><h3>Selected pallets</h3></div><div class="scroll"><table><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th>Routing #</th><th>Date received</th><th class="r">Quantity</th><th></th></tr></thead><tbody>';
+  if(!P.list.length)h+='<tr><td colspan="7" class="empty-note">No pallets selected yet. Pick pallets from the table above.</td></tr>';
+  P.list.forEach(function(x,i){h+='<tr><td class="num">'+(i+1)+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td>'+esc(partName(p))+'</td><td class="num">'+esc(x.routing)+'</td><td class="num">'+esc(day(x.received))+'</td><td class="r num">'+fmt(x.qty)+'</td><td class="r"><button class="btn ghost sm" data-act="xpick" data-v="'+esc(x.key)+'">Remove</button></td></tr>'});
+  h+='</tbody>'+(P.list.length?'<tfoot><tr><td colspan="5">Total of '+P.list.length+' pallet'+(P.list.length>1?'s':'')+'</td><td class="r num">'+fmt(P.total)+' / '+fmt(q)+'</td><td></td></tr></tfoot>':'')+'</table></div></div>';
   if(!enough)return h;
   h+='<div class="panel"><div class="panel-h"><h3>Send to machine</h3><p>'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · '+fmt(P.total)+' × '+esc(partName(p))+'</p></div><div class="machines">';
   MACHINES.forEach(function(m){h+='<button class="machine" data-act="xmachine" data-v="'+m+'" aria-pressed="'+(xfer.machine===m)+'">'+m+'</button>'});
@@ -322,9 +335,9 @@ function pickSheet(p,q,P){
     });
     h+='</tbody></table></div>';
   })});
-  h+='</div><table class="sheet-list"><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th class="r">Quantity</th><th>Machine</th><th>Done</th></tr></thead><tbody>';
-  P.list.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(partName(p))+'</td><td class="r">'+fmt(x.qty)+'</td><td>'+esc(xfer.machine)+'</td><td><span class="box"></span></td></tr>'});
-  h+='</tbody><tfoot><tr><td colspan="3">'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · requested '+fmt(q)+'</td><td class="r">'+fmt(P.total)+'</td><td>'+esc(xfer.machine)+'</td><td></td></tr></tfoot></table></div>';
+  h+='</div><table class="sheet-list"><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th>Routing #</th><th>Received</th><th class="r">Quantity</th><th>Machine</th><th>Done</th></tr></thead><tbody>';
+  P.list.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(partName(p))+'</td><td>'+esc(x.routing)+'</td><td>'+esc(day(x.received))+'</td><td class="r">'+fmt(x.qty)+'</td><td>'+esc(xfer.machine)+'</td><td><span class="box"></span></td></tr>'});
+  h+='</tbody><tfoot><tr><td colspan="5">'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · requested '+fmt(q)+'</td><td class="r">'+fmt(P.total)+'</td><td>'+esc(xfer.machine)+'</td><td></td></tr></tfoot></table></div>';
   return h;
 }
 function printSheet(){
@@ -371,6 +384,22 @@ function machinesView(){
   log.forEach(function(e){var p=part(e.part);h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+esc(p?partName(p):(e.partNumber||e.partId))+'</td><td class="r num">'+fmt(e.qty)+'</td><td>'+esc(e.from)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>'});
   h+='</tbody></table></div></div></div>';
   return h;
+}
+
+// Every pallet on the racking with its routing number and date received, in racking order.
+function palletSheet(){
+  var multi=state.sections.length>1,n=0;
+  var h='<div class="panel"><div class="panel-h"><h3>Pallet tracking</h3><p>Each pallet on the racking. Routing numbers and dates received were filled with placeholders; type over them with the real values and save.</p></div><div class="scroll"><table class="tracking"><thead><tr>'+
+    '<th>Location</th><th style="min-width:190px">Part Number</th><th class="r">Qty</th><th style="min-width:130px">Routing #</th><th style="min-width:150px">Date received</th></tr></thead><tbody>';
+  state.sections.forEach(function(s){s.rows.forEach(function(r,ri){r.racks.forEach(function(rk,ki){rk.levels.forEach(function(lv,li){lv.items.forEach(function(it,ii){
+    var p=part(it.part);if(!p)return;n++;
+    var loc=r.row+'-'+rk.rack+'-'+lv.level,d='data-s="'+esc(s.key)+'" data-r="'+ri+'" data-k="'+ki+'" data-l="'+li+'" data-i="'+ii+'"';
+    h+='<tr><td><span class="tagl inline">'+esc((multi?s.name+' ':'')+loc)+'</span></td><td>'+esc(partName(p))+'</td><td class="r num">'+fmt(num(it.qty))+'</td>'+
+      '<td><input data-act="pt" data-f="routing" '+d+' value="'+esc(it.routing)+'" aria-label="Routing number at '+esc(loc)+'"'+dis()+'></td>'+
+      '<td><input type="date" data-act="pt" data-f="received" '+d+' value="'+esc(it.received)+'" aria-label="Date received at '+esc(loc)+'"'+dis()+'></td></tr>';
+  })})})})});
+  if(!n)h+='<tr><td colspan="5" class="empty-note">No pallets on the racking.</td></tr>';
+  return h+'</tbody></table></div></div>';
 }
 
 /* ---------- admin ---------- */
@@ -511,7 +540,7 @@ root.addEventListener('click',function(e){
   }
   else if(a==='refreshlog')loadAdmin();
   /* transfer actions */
-  else if(a==='xpick'){var pi=xfer.picks.indexOf(t.dataset.v);if(pi>=0)xfer.picks.splice(pi,1);else xfer.picks.push(t.dataset.v);xfer.err='';xfer.msg='';refreshTransfer()}
+  else if(a==='xpick'){var pi=xfer.picks.indexOf(t.dataset.v);if(pi>=0)xfer.picks.splice(pi,1);else if(xfer.picks.length<MAX_PALLETS)xfer.picks.push(t.dataset.v);xfer.err='';xfer.msg='';refreshTransfer()}
   else if(a==='xprint')printSheet();
   else if(a==='xmachine'){xfer.machine=t.dataset.v;refreshTransfer()}
   else if(a==='xgo')doTransfer();
@@ -523,7 +552,7 @@ root.addEventListener('change',function(e){
   if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+t.value+'.');return}
   if(t.dataset.act!=='part'||!canEdit())return;
   var lv=lvOf(t),v=t.value,p=part(v);
-  if(t.dataset.i==='new'){if(!v)return;lv.items.push({part:v,qty:p&&p.qtyPerPallet!==''?num(p.qtyPerPallet):''})}
+  if(t.dataset.i==='new'){if(!v)return;lv.items.push({part:v,qty:p&&p.qtyPerPallet!==''?num(p.qtyPerPallet):'',routing:'',received:today()})}
   else{var it=lv.items[+t.dataset.i];it.part=v;if(v&&(it.qty===''||it.qty==null)&&p&&p.qtyPerPallet!=='')it.qty=num(p.qtyPerPallet)}
   changed();render();
   var r=rows()[+t.dataset.r],rk=r.racks[+t.dataset.k],i=t.dataset.i==='new'?lv.items.length-1:t.dataset.i;
@@ -540,6 +569,9 @@ root.addEventListener('input',function(e){
     var T=totals(),view=document.getElementById('view'),tmp=document.createElement('div');tmp.innerHTML=racking(T);
     var oldHead=view.querySelector('.rowhead'),newHead=tmp.querySelector('.rowhead');if(oldHead&&newHead)oldHead.replaceWith(newHead);
     var oldChips=view.querySelector('.rowpick'),newChips=tmp.querySelector('.rowpick');if(oldChips&&newChips)oldChips.replaceWith(newChips);
+  }else if(a==='pt'){
+    var S=sec(t.dataset.s),pi=S&&S.rows[+t.dataset.r].racks[+t.dataset.k].levels[+t.dataset.l].items[+t.dataset.i];if(!pi)return;
+    pi[t.dataset.f]=t.value;changed();
   }else if(a==='pf'){
     var p=part(t.dataset.p),f=t.dataset.f;if(!p)return;
     p[f]=t.type==='number'?(t.value===''?'':Math.max(0,num(t.value))):t.value;changed();
