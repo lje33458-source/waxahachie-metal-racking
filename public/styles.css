@@ -237,17 +237,26 @@ td select{border:1px solid var(--line);background:var(--bg);border-radius:4px;pa
 
 /* machine cards: 2 × 2, one per machine, pallets drawn as blocks */
 .mcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.mcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;grid-template-rows:auto 1fr auto;gap:10px;min-height:190px;min-width:0}
+.mcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;grid-template-rows:auto 1fr;gap:10px;min-height:190px;min-width:0}
 .mcard.on{border-color:var(--beam);box-shadow:0 0 0 2px var(--beam)}
-.mcard-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mcard-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .mcard-h h3{margin:0;font-family:var(--display);font-size:28px;letter-spacing:.04em}
 .mcard-h span{font-size:13px}
 .mpals{display:flex;flex-wrap:wrap;gap:8px;align-content:start}
 .mpals p{margin:0}
-.mpal{flex:1 1 150px;max-width:220px;border:2px solid var(--steel-lo);background:var(--sunk);border-radius:6px;padding:8px 10px;display:grid;gap:4px;justify-items:start}
-.mpal .pn{font-size:13px;word-break:break-all}
-.mpal .q{font-family:var(--display);font-size:24px;font-weight:700;line-height:1}
-.mpal small{font-size:11px}
+.mpal{flex:0 1 190px;min-width:140px;display:grid}
+/* a pallet: the stacked load on top, a wooden deck with three blocks under it */
+.mpal .load{border:2px solid var(--steel-lo);border-bottom:0;border-radius:3px 3px 0 0;padding:8px 10px;display:grid;gap:3px;justify-items:start;
+  background:repeating-linear-gradient(0deg,var(--sunk) 0 5px,color-mix(in srgb,var(--steel) 35%,var(--sunk)) 5px 6px)}
+.mpal .pn{font-size:12px;overflow-wrap:anywhere;background:var(--surface);padding:0 3px;border-radius:2px}
+.mpal .q{font-family:var(--display);font-size:24px;font-weight:700;line-height:1;background:var(--surface);padding:0 3px;border-radius:2px}
+.mpal .q small{font-size:15px;color:var(--muted)}
+.mpal .lbl{font-size:11px;color:var(--muted);background:var(--surface);padding:0 3px;border-radius:2px}
+.mpal .deck{height:18px;position:relative;background:linear-gradient(#b5874f,#8a5f30) top/100% 6px no-repeat}
+.mpal .deck i{position:absolute;bottom:0;width:16%;height:12px;background:#7a522a;border-radius:0 0 2px 2px}
+.mpal .deck i:nth-child(1){left:2%}.mpal .deck i:nth-child(2){left:42%}.mpal .deck i:nth-child(3){right:2%}
+.filters{display:grid;gap:6px;justify-items:end}
+.addpal{border-top:1px solid var(--line)}
 .mcard-f{display:flex;justify-content:flex-end}
 .chip.sm{min-width:0;padding:5px 10px;font-weight:600}
-@media (max-width:520px){.mcard{padding:10px}.mpal{flex-basis:100%}}
+@media (max-width:520px){.mcard{padding:10px}.mpal{flex-basis:100%;min-width:0}.filters{justify-items:start}}

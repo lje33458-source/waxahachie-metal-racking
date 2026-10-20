@@ -8,7 +8,7 @@ var dirty=false,saving=false,newer=null,saveErr='';
 var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master', 'transfer', 'machines' or 'admin'; rows holds the picked row per section
 var MACHINES=['EMK','EMLK','P4','L5'];
 var mach={ret:null,used:'',busy:false,msg:'',err:''}; // ret is the machine being returned to the rack
-var tlog={range:'today',entries:null,err:''};
+var tlog={range:'today',entries:null,err:''},mlog={range:'today',machine:'all',entries:null,err:''};
 var xfer={part:'',qty:'',picks:[],machine:null,busy:false,msg:'',err:''}; // picks holds the chosen pallets' keys, in pick order
 var admin={users:[],log:[],msg:'',err:'',created:null,resetFor:null,armed:null};
 
@@ -77,7 +77,7 @@ function start(){
     else store('wmr-draft:'+me.id);
     render();
     if(ui.tab==='admin')loadAdmin();
-    if(ui.tab==='machines')loadLog();
+    loadLog();
   });
 }
 
@@ -118,7 +118,7 @@ function render(){
     '<nav class="tabs" role="tablist">'+
       state.sections.map(function(s){return tab(s.key,esc(s.name))}).join('')+tab('transfer','Transfer Material')+tab('machines','Machine')+tab('master','Master')+(isAdmin()?tab('admin','Admin'):'')+
     '</nav>'+
-    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T))+'</section>';
+    '<section id="view">'+(ui.tab==='master'?master(T):ui.tab==='transfer'?transferView():ui.tab==='machines'?machinesView():ui.tab==='admin'?adminView():racking(T)+(isAdmin()?palletSheet():''))+'</section>';
   renderStatus();
 }
 function tab(v,label){return '<button class="tab" role="tab" id="tab-'+v+'" aria-selected="'+(ui.tab===v)+'" data-act="tab" data-v="'+v+'">'+label+'</button>'}
@@ -217,7 +217,6 @@ function master(T){
   });
   h+='</tbody><tfoot><tr><td colspan="5">All parts</td><td class="r total num">'+fmt(grand)+'</td><td class="r num">'+T.filled+'</td><td colspan="'+(canEdit()?2:1)+'"></td></tr></tfoot></table></div>'+
      (canEdit()?'<div class="tablefoot"><button class="btn" data-act="addpart">+ Add part</button></div>':'')+'</div>';
-  h+=palletSheet();
   var secs=state.sections.filter(function(s){return s.rows.length});
   var grp=secs.length>1; // section headings only when more than one section is switched on
   h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th'+(grp?' rowspan="2"':'')+'>Part Number</th>';
@@ -230,7 +229,7 @@ function master(T){
     secs.forEach(function(s){s.rows.forEach(function(r){var v=T.byRow[rowKey(s,r)][p.k];h+='<td class="r num'+(v?'':' zero')+'">'+(v?fmt(v):'–')+'</td>'})});
     h+='<td class="r num"><b>'+fmt(T.t[p.k]||0)+'</b></td></tr>';
   });
-  h+='</tbody></table></div></div></div>';
+  h+='</tbody></table></div></div>'+(isAdmin()?logPanel('mlog'):'')+'</div>';
   return h;
 }
 
@@ -392,13 +391,15 @@ function machinesView(){
   var h='<div class="stack"><div class="mcards">';
   MACHINES.forEach(function(m){
     var list=atMachine(m),tot=list.reduce(function(t,x){return t+num(x.qty)},0);
-    h+='<div class="mcard'+(mach.ret===m?' on':'')+'"><div class="mcard-h"><h3>'+m+'</h3><span class="dim num">'+list.length+' pallet'+(list.length===1?'':'s')+' · '+fmt(tot)+' sheets</span></div><div class="mpals">';
+    h+='<div class="mcard'+(mach.ret===m?' on':'')+'"><div class="mcard-h">'+
+      (list.length&&canEdit()?'<button class="btn'+(mach.ret===m?' primary':'')+'" data-act="mret" data-v="'+m+'">'+(mach.ret===m?'Close return':'Return to Rack')+'</button>':'')+
+      '<h3>'+m+'</h3></div><div class="mpals">';
     if(!list.length)h+='<p class="dim">No material at this machine.</p>';
     list.forEach(function(x){var p=part(x.part),f=fromLoc(x);
-      h+='<div class="mpal"><b class="pn">'+esc(p?partName(p):'Removed part')+'</b><span class="tagl inline">'+esc(f.loc)+'</span><span class="q num">'+fmt(num(x.qty))+'</span><small class="dim">Received '+esc(day(x.received))+'</small></div>'});
-    h+='</div>';
-    if(list.length&&canEdit())h+='<div class="mcard-f"><button class="btn'+(mach.ret===m?' primary':'')+'" data-act="mret" data-v="'+m+'">'+(mach.ret===m?'Close return':'Return to Rack')+'</button></div>';
-    h+='</div>';
+      h+='<div class="mpal" title="Pallet from '+esc(f.loc)+'"><div class="load"><b class="pn">'+esc(p?partName(p):'Removed part')+'</b><span class="tagl inline">'+esc(f.loc)+'</span>'+
+        '<span class="q num">'+fmt(num(x.qty))+' <small>/ '+(x.requested?fmt(num(x.requested)):'–')+'</small></span><small class="lbl">pallet qty / requested</small><small class="lbl">Received '+esc(day(x.received))+'</small></div>'+
+        '<div class="deck" aria-hidden="true"><i></i><i></i><i></i></div></div>'});
+    h+='</div></div>';
   });
   h+='</div>';
   if(mach.msg)h+='<p class="ok-msg" role="status">'+esc(mach.msg)+'</p>';
@@ -411,10 +412,10 @@ function machinesView(){
     if(!row)return;any=true;grand+=row;
     rowsH+='<tr><td>'+esc(partName(p))+'</td>'+MACHINES.map(function(m){return '<td class="r num'+(v[m]?'':' zero')+'">'+(v[m]?fmt(v[m]):'–')+'</td>'}).join('')+'<td class="r num"><b>'+fmt(row)+'</b></td></tr>';
   });
-  h+='<div class="panel"><div class="panel-h"><h3>Machine</h3></div><div class="scroll"><table class="matrix"><thead><tr><th>Part Number</th>'+MACHINES.map(function(m){return '<th class="r">'+m+'</th>'}).join('')+'<th class="r">Total</th></tr></thead><tbody>'+
+  h+='<div class="panel"><div class="panel-h"><h3>Material at Machine</h3></div><div class="scroll"><table class="matrix"><thead><tr><th>Part Number</th>'+MACHINES.map(function(m){return '<th class="r">'+m+'</th>'}).join('')+'<th class="r">Total</th></tr></thead><tbody>'+
     (any?rowsH:'<tr><td colspan="'+(MACHINES.length+2)+'" class="empty-note">No material is at a machine.</td></tr>')+'</tbody>'+
     (any?'<tfoot><tr><td>All material</td>'+MACHINES.map(function(m){return '<td class="r num">'+fmt(tot[m])+'</td>'}).join('')+'<td class="r num">'+fmt(grand)+'</td></tr></tfoot>':'')+'</table></div></div>';
-  h+=logPanel();
+  h+=logPanel('tlog');
   return h+'</div>';
 }
 function returnPanel(){
@@ -458,41 +459,62 @@ function doReturn(){
     .catch(function(x){mach.busy=false;if(x.silent)return;mach.err=x.message;reloadLatest()});
 }
 var RANGES=[['today','Today'],['week','Last week'],['month','Last month'],['year','Last year',1],['all','All time',1]];
-function loadLog(){
-  var since=new Date();since.setHours(0,0,0,0);
-  return api('GET','/api/transfers?range='+tlog.range+'&since='+since.getTime()).then(function(j){tlog.entries=j.entries;tlog.err='';if(ui.tab==='machines'){var el=document.getElementById('tlog');if(el)el.outerHTML=logPanel()}})
-    .catch(function(x){if(!x.silent){tlog.err=x.message;var el=document.getElementById('tlog');if(el)el.outerHTML=logPanel()}});
+// Two logs read the same transfer list: the Machine Transfer Log on the Machine tab, and the admins' Transfer Log on Master (filterable by machine).
+var LOGS={tlog:{title:'Machine Transfer Log',st:tlog},mlog:{title:'Transfer Log',st:mlog,byMachine:true}};
+function loadLog(id){
+  if(!id){if(ui.tab==='machines')loadLog('tlog');if(ui.tab==='master'&&isAdmin())loadLog('mlog');return}
+  var st=LOGS[id].st,since=new Date();since.setHours(0,0,0,0);
+  var redraw=function(){var el=document.getElementById(id);if(el)el.outerHTML=logPanel(id)};
+  return api('GET','/api/transfers?range='+st.range+'&since='+since.getTime()).then(function(j){st.entries=j.entries;st.err='';redraw()})
+    .catch(function(x){if(!x.silent){st.err=x.message;redraw()}});
 }
-function logPanel(){
-  var h='<div class="panel" id="tlog"><div class="panel-h"><h3>Transfer Log</h3><div class="chips">';
-  RANGES.forEach(function(r){if(r[2]&&!isAdmin())return;h+='<button class="chip sm" data-act="lrange" data-v="'+r[0]+'" aria-pressed="'+(tlog.range===r[0])+'">'+r[1]+'</button>'});
-  h+='</div></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Part Number</th><th class="r">Qty</th><th>Locations</th><th>Machine</th></tr></thead><tbody>';
-  if(tlog.err)h+='<tr><td colspan="7" class="err">'+esc(tlog.err)+'</td></tr>';
-  else if(!tlog.entries)h+='<tr><td colspan="7" class="empty-note">Loading…</td></tr>';
-  else if(!tlog.entries.length)h+='<tr><td colspan="7" class="empty-note">Nothing in this period.</td></tr>';
-  (tlog.entries||[]).forEach(function(e){
+function logPanel(id){
+  var L=LOGS[id],st=L.st;
+  var h='<div class="panel" id="'+id+'"><div class="panel-h"><h3>'+L.title+'</h3><div class="filters"><div class="chips">';
+  RANGES.forEach(function(r){if(r[2]&&!isAdmin())return;h+='<button class="chip sm" data-act="lrange" data-log="'+id+'" data-v="'+r[0]+'" aria-pressed="'+(st.range===r[0])+'">'+r[1]+'</button>'});
+  h+='</div>';
+  if(L.byMachine){h+='<div class="chips">';['all'].concat(MACHINES).forEach(function(m){h+='<button class="chip sm" data-act="lmach" data-log="'+id+'" data-v="'+m+'" aria-pressed="'+(st.machine===m)+'">'+(m==='all'?'All machines':m)+'</button>'});h+='</div>'}
+  h+='</div></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Part Number</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
+  var list=(st.entries||[]).filter(function(e){return e.machine&&(!L.byMachine||st.machine==='all'||e.machine===st.machine)});
+  if(st.err)h+='<tr><td colspan="7" class="err">'+esc(st.err)+'</td></tr>';
+  else if(!st.entries)h+='<tr><td colspan="7" class="empty-note">Loading…</td></tr>';
+  else if(!list.length)h+='<tr><td colspan="7" class="empty-note">Nothing in this period.</td></tr>';
+  list.forEach(function(e){
     var ret=e.kind==='return',pals=Array.isArray(e.pallets)?e.pallets:[];
     var pns={};if(ret)pals.forEach(function(x){pns[x.partNumber||x.part]=1});else pns[e.partNumber||e.part]=1;
-    var locs=pals.map(function(x){return x.loc+(ret?(x.qty?' ('+fmt(x.qty)+')':' (used up)'):'')}).join(', ');
-    h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+(ret?'Return to rack · '+fmt(e.used)+' used':'Transfer · '+fmt(e.requested)+' requested')+'</td><td>'+esc(Object.keys(pns).join(', '))+'</td><td class="r num">'+fmt(e.qty)+'</td><td class="detail">'+esc(locs)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>';
+    var locs=pals.filter(function(x){return !ret||x.qty}).map(function(x){return x.loc+(ret?' ('+fmt(x.qty)+')':'')}).join(', ')||(ret?'Nothing left over':'');
+    var mach_='<b>'+esc(e.machine)+'</b>',rack='<span class="detail">'+esc(locs)+'</span>';
+    h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+(ret?'Return to rack · '+fmt(e.used)+' used':'Transfer · '+fmt(e.requested)+' requested')+'</td><td>'+esc(Object.keys(pns).join(', '))+'</td><td class="r num">'+fmt(e.qty)+'</td>'+
+      '<td class="detail">'+(ret?mach_:rack)+'</td><td class="detail">'+(ret?rack:mach_)+'</td></tr>';
   });
   return h+'</tbody></table></div></div>';
 }
 
-// Every pallet on the racking with its routing number and date received, in racking order.
+// Admins only: every pallet on the racking with its routing number and date received, plus a form to add a pallet.
 function palletSheet(){
-  var multi=state.sections.length>1,n=0;
-  var h='<div class="panel"><div class="panel-h"><h3>Pallet tracking</h3><p>Each pallet on the racking. Routing numbers and dates received were filled with placeholders; type over them with the real values and save.</p></div><div class="scroll"><table class="tracking"><thead><tr>'+
-    '<th>Location</th><th style="min-width:190px">Part Number</th><th class="r">Qty</th><th style="min-width:130px">Routing #</th><th style="min-width:150px">Date received</th></tr></thead><tbody>';
-  state.sections.forEach(function(s){s.rows.forEach(function(r,ri){r.racks.forEach(function(rk,ki){rk.levels.forEach(function(lv,li){lv.items.forEach(function(it,ii){
-    var p=part(it.part);if(!p)return;n++;
-    var loc=r.row+'-'+rk.rack+'-'+lv.level,d='data-s="'+esc(s.key)+'" data-r="'+ri+'" data-k="'+ki+'" data-l="'+li+'" data-i="'+ii+'"';
-    h+='<tr><td><span class="tagl inline">'+esc((multi?s.name+' ':'')+loc)+'</span></td><td>'+esc(partName(p))+'</td><td class="r num">'+fmt(num(it.qty))+'</td>'+
-      '<td><input data-act="pt" data-f="routing" '+d+' value="'+esc(it.routing)+'" aria-label="Routing number at '+esc(loc)+'"'+dis()+'></td>'+
-      '<td><input type="date" data-act="pt" data-f="received" '+d+' value="'+esc(it.received)+'" aria-label="Date received at '+esc(loc)+'"'+dis()+'></td></tr>';
-  })})})})});
-  if(!n)h+='<tr><td colspan="5" class="empty-note">No pallets on the racking.</td></tr>';
-  return h+'</tbody></table></div></div>';
+  var multi=state.sections.length>1,n=0,spots='';
+  var h='<div class="panel"><div class="panel-h"><h3>Pallet tracking</h3></div><div class="scroll"><table class="tracking"><thead><tr>'+
+    '<th>Location</th><th style="min-width:190px">Part Number</th><th class="r">Qty</th><th style="min-width:130px">Routing #</th><th style="min-width:150px">Date received</th><th></th></tr></thead><tbody>';
+  state.sections.forEach(function(s){s.rows.forEach(function(r,ri){r.racks.forEach(function(rk,ki){rk.levels.forEach(function(lv,li){
+    var loc=r.row+'-'+rk.rack+'-'+lv.level,lab=(multi?s.name+' ':'')+loc,d0='data-s="'+esc(s.key)+'" data-r="'+ri+'" data-k="'+ki+'" data-l="'+li+'"';
+    spots+='<option value="'+esc(s.key+'|'+ri+'|'+ki+'|'+li)+'">'+esc(lab)+(lv.items.length?' (has a pallet)':'')+'</option>';
+    lv.items.forEach(function(it,ii){
+      var p=part(it.part);if(!p)return;n++;
+      var d=d0+' data-i="'+ii+'"';
+      h+='<tr><td><span class="tagl inline">'+esc(lab)+'</span></td><td>'+esc(partName(p))+'</td><td class="r num">'+fmt(num(it.qty))+'</td>'+
+        '<td><input data-act="pt" data-f="routing" '+d+' value="'+esc(it.routing)+'" aria-label="Routing number at '+esc(loc)+'"></td>'+
+        '<td><input type="date" data-act="pt" data-f="received" '+d+' value="'+esc(it.received)+'" aria-label="Date received at '+esc(loc)+'"></td>'+
+        '<td><button class="x" data-act="ptdel" '+d+' aria-label="Remove pallet at '+esc(loc)+'" title="Remove pallet">×</button></td></tr>';
+    });
+  })})})});
+  if(!n)h+='<tr><td colspan="6" class="empty-note">No pallets on the racking.</td></tr>';
+  h+='</tbody></table></div><div class="formrow addpal"><div class="field"><label for="ap-loc">Location</label><select id="ap-loc"><option value="">Select location</option>'+spots+'</select></div>'+
+    '<div class="field grow"><label for="ap-part">Part Number</label><select id="ap-part"><option value="">Select part number</option>'+state.parts.map(function(p){return '<option value="'+esc(p.k)+'">'+esc(partName(p))+'</option>'}).join('')+'</select></div>'+
+    '<div class="field"><label for="ap-qty">Qty</label><input id="ap-qty" class="num" type="number" min="1" step="1" inputmode="numeric" placeholder="Qty / pallet"></div>'+
+    '<div class="field"><label for="ap-rt">Routing #</label><input id="ap-rt" autocomplete="off"></div>'+
+    '<div class="field"><label for="ap-date">Date received</label><input id="ap-date" type="date" value="'+today()+'"></div>'+
+    '<button class="btn primary" data-act="addpallet">Add pallet</button></div><p class="err" id="ap-err" role="alert" style="padding:0 14px 12px"></p></div>';
+  return h;
 }
 
 /* ---------- admin ---------- */
@@ -533,7 +555,7 @@ function adminView(){
   h+='</tbody></table></div></div>';
   h+='<div class="panel"><div class="panel-h"><h3>Activity</h3><button class="btn ghost sm" data-act="refreshlog">Refresh</button></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th></tr></thead><tbody>';
   if(!admin.log.length)h+='<tr><td colspan="4" class="empty-note">No activity yet.</td></tr>';
-  admin.log.slice(0,100).forEach(function(e){
+  admin.log.filter(function(e){return e.action!=='transfer'&&e.action!=='return'}).slice(0,100).forEach(function(e){
     h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.user)+'</td><td>'+esc(ACTIONS[e.action]||e.action)+'</td><td class="detail dim">'+esc(e.detail)+'</td></tr>';
   });
   h+='</tbody></table></div></div></div>';
@@ -585,7 +607,7 @@ root.addEventListener('click',function(e){
   if(t.tagName==='SELECT'||t.tagName==='INPUT')return;
   if(a!=='delrow'&&a!=='delpart'&&ui.armed){ui.armed=null;if(a!=='tab'&&a!=='row')render()}
   if(a!=='deluser'&&admin.armed){admin.armed=null}
-  if(a==='tab'){ui.tab=t.dataset.v;ui.armed=null;saveUi();render();refocus('tab-'+ui.tab);if(ui.tab==='admin')loadAdmin();if(ui.tab==='machines')loadLog()}
+  if(a==='tab'){ui.tab=t.dataset.v;ui.armed=null;saveUi();render();refocus('tab-'+ui.tab);if(ui.tab==='admin')loadAdmin();loadLog()}
   else if(a==='row'){var rw=rows()[+t.dataset.v];if(rw)ui.rows[ui.tab]=rw.row;saveUi();render()}
   else if(a==='logout'){api('POST','/api/logout',{}).finally(function(){me=null;showLogin('')})}
   else if(a==='account'){ui.account=!ui.account;render();if(ui.account)refocus('acc-cur')}
@@ -639,7 +661,18 @@ root.addEventListener('click',function(e){
   else if(a==='xgo')doTransfer();
   else if(a==='mret'){if(mach.ret===t.dataset.v)mach.ret=null;else{mach.ret=t.dataset.v;mach.used=String(requestedAt(mach.ret))}mach.err='';mach.msg='';render()}
   else if(a==='mgo')doReturn();
-  else if(a==='lrange'){tlog.range=t.dataset.v;tlog.entries=null;var el=document.getElementById('tlog');if(el)el.outerHTML=logPanel();loadLog()}
+  else if(a==='lrange'){var lst=LOGS[t.dataset.log].st;lst.range=t.dataset.v;lst.entries=null;var el=document.getElementById(t.dataset.log);if(el)el.outerHTML=logPanel(t.dataset.log);loadLog(t.dataset.log)}
+  else if(a==='lmach'){LOGS[t.dataset.log].st.machine=t.dataset.v;var el2=document.getElementById(t.dataset.log);if(el2)el2.outerHTML=logPanel(t.dataset.log)}
+  else if(a==='ptdel'&&isAdmin()){var S2=sec(t.dataset.s);S2.rows[+t.dataset.r].racks[+t.dataset.k].levels[+t.dataset.l].items.splice(+t.dataset.i,1);changed();render()}
+  else if(a==='addpallet'&&isAdmin()){
+    var ge=function(id){return document.getElementById(id)},er=ge('ap-err'),lp=ge('ap-loc').value.split('|'),pk=ge('ap-part').value,pp=part(pk),aq=ge('ap-qty').value;
+    if(lp.length<4){er.textContent='Choose a location.';return}
+    if(!pp){er.textContent='Choose a part number.';return}
+    var qn=aq===''?num(pp.qtyPerPallet):Number(aq);
+    if(!(qn>0)){er.textContent='Enter the quantity on the pallet.';return}
+    sec(lp[0]).rows[+lp[1]].racks[+lp[2]].levels[+lp[3]].items.push({part:pk,qty:qn,routing:ge('ap-rt').value.trim(),received:ge('ap-date').value||today()});
+    changed();render();
+  }
 });
 
 root.addEventListener('change',function(e){
