@@ -3,8 +3,8 @@
 A shared web app for Americase racking. People sign in with a **User ID + passkey**, assign Part IDs and quantities to rack addresses, and keep the Metal Master list. Admins manage users from the **Admin** tab.
 
 - **Racking**: pick a row, then set the Part ID and quantity at each address (`row-rack-level`). (Separate Challenger and HQ PF1 sections are built in but switched off; see `SECTIONS` in `lib/api.js`.)
-- **Master**: the parts list, with total quantity, locations and pallets for each part, plus a part-by-row breakdown.
-- **Transfer Material**: pick a material type and the quantity needed, choose a pallet that has enough (green; pallets with less are red and can't be picked), then the machine it goes to (EMK, EMLK, P4 or L5). The quantity comes off that pallet on the racking and Master, and is added to the machine. Editors and admins only.
+- **Master**: the parts list (by Part Number), with total quantity, locations and pallets for each part, plus a part-by-row breakdown.
+- **Transfer Material**: pick a part number and the quantity needed, then choose whole pallets to cover it: one green pallet (holds enough on its own) or several yellow ones (each holds less). A running selected / requested total and a Selected Pallets list show the picks; the machine buttons (EMK, EMLK, P4, L5) appear once enough is selected. Choosing a machine shows a one-page printable pick sheet with the rack locations marked. Transferring takes the pallets off the racking and Master and adds them to the machine. Editors and admins only.
 - **Machine Material**: how much of each material has been transferred to each machine, plus the recent transfers.
 - **Admin** (admins only): add users, set roles, reset passkeys, disable or delete accounts, and see an activity log of sign-ins, saves and user changes.
 

@@ -178,13 +178,54 @@ td select{border:1px solid var(--line);background:var(--bg);border-radius:4px;pa
 /* material transfer */
 .xfer tbody tr.go{background:color-mix(in srgb,var(--ok) 14%,transparent);cursor:pointer}
 .xfer tbody tr.go:hover{background:color-mix(in srgb,var(--ok) 24%,transparent)}
-.xfer tbody tr.no{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--muted)}
-.xfer tbody tr.picked{box-shadow:inset 4px 0 0 var(--ok);background:color-mix(in srgb,var(--ok) 30%,transparent)}
-.pick{width:22px;height:22px;border-radius:50%;border:2px solid var(--ok);background:var(--surface);cursor:pointer;padding:0}
-.pick[aria-pressed="true"]{background:radial-gradient(circle,var(--ok) 0 5px,var(--surface) 6px)}
+.xfer tbody tr.part{background:color-mix(in srgb,#f5c400 22%,transparent);cursor:pointer}
+.xfer tbody tr.part:hover{background:color-mix(in srgb,#f5c400 34%,transparent)}
+.xfer tbody tr.picked{box-shadow:inset 4px 0 0 var(--ink);font-weight:600}
+.xfer tbody tr.go.picked{background:color-mix(in srgb,var(--ok) 34%,transparent)}
+.xfer tbody tr.part.picked{background:color-mix(in srgb,#f5c400 48%,transparent)}
+.pick{width:22px;height:22px;border-radius:5px;border:2px solid var(--ink);background:var(--surface);cursor:pointer;padding:0}
+.pick[aria-pressed="true"]{background:var(--ink);box-shadow:inset 0 0 0 3px var(--surface)}
+.tally{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;background:var(--surface);border:1px solid var(--line);border-left:5px solid #f5c400;border-radius:8px;padding:10px 14px}
+.tally.ok{border-left-color:var(--ok)}
+.tally b{font-family:var(--display);font-size:30px;font-weight:700;line-height:1}
+.tally .meter{flex:1 1 160px;height:8px;border-radius:4px}
+.tally .meter i{background:#f5c400}
+.tally.ok .meter i{background:var(--ok)}
 .tagl.inline{display:inline-block;font-size:15px}
 .machines{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px}
 .machine{border:2px solid var(--line);background:var(--surface);border-radius:8px;padding:16px 8px;cursor:pointer;font-family:var(--display);font-size:24px;font-weight:700;letter-spacing:.04em}
 .machine:hover{border-color:var(--muted)}
 .machine[aria-pressed="true"]{border-color:var(--beam);background:var(--beam);color:var(--beam-ink)}
 .tablefoot p{margin:0}
+
+/* pick sheet: shown on screen as a preview, printed on its own through #print-root */
+.sheet-wrap{padding:14px;overflow-x:auto}
+.sheet{background:#fff;color:#000;border:1px solid #bbb;width:7.5in;max-width:100%;padding:.3in;margin:0 auto;font-family:var(--body);font-size:12px;display:grid;gap:10px}
+.sheet table{border-collapse:collapse;width:100%}
+.sheet th,.sheet td{border:1px solid #888;padding:3px 5px;background:#fff;color:#000;font-size:11px;letter-spacing:0;text-transform:none}
+.sheet th{font-weight:700;background:#eee}
+.sheet-h{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #000;padding-bottom:6px}
+.sheet-h b{display:block;font-family:var(--display);font-size:20px;text-transform:uppercase}
+.sheet-h span{font-size:11px;color:#333}
+.sheet-h .to{font-size:14px;text-align:right}
+.sheet-h .to b{font-size:30px;line-height:1}
+.sheet-part{margin:0;font-size:13px}
+.sheet-racks{display:flex;flex-wrap:wrap;gap:10px}
+.sheet-row{flex:1 1 2.2in;break-inside:avoid}
+.sheet-row-h{font-family:var(--display);font-weight:700;font-size:14px;text-transform:uppercase;margin-bottom:3px}
+.rackmap td{text-align:center;white-space:nowrap;height:20px;color:#777}
+.rackmap td.full{color:#000;background:#e4e4e4}
+.rackmap td.none{background:repeating-linear-gradient(45deg,#fff 0 4px,#ddd 4px 8px)}
+.rackmap td.hit{background:#000;color:#fff;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.rackmap td.hit b{display:inline-block;background:#fff;color:#000;border-radius:50%;width:16px;height:16px;line-height:16px;font-size:10px}
+.sheet-list td.r,.sheet-list th.r{text-align:right}
+.sheet-list tfoot td{font-weight:700;background:#eee}
+.sheet .box{display:inline-block;width:14px;height:14px;border:1.5px solid #000}
+#print-root{display:none}
+@media print{
+  @page{size:letter;margin:.5in}
+  body{background:#fff}
+  #app-root{display:none!important}
+  #print-root{display:block}
+  #print-root .sheet{border:0;padding:0;width:100%;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}

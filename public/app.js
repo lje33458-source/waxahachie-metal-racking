@@ -7,7 +7,7 @@ var state=null;         // working copy being edited
 var dirty=false,saving=false,newer=null,saveErr='';
 var ui={tab:'hq',rows:{},armed:null,account:false}; // tab is a section key, 'master', 'transfer', 'machines' or 'admin'; rows holds the picked row per section
 var MACHINES=['EMK','EMLK','P4','L5'];
-var xfer={part:'',qty:'',pick:null,machine:null,busy:false,msg:'',err:''}; // pick is the chosen pallet's key
+var xfer={part:'',qty:'',picks:[],machine:null,busy:false,msg:'',err:''}; // picks holds the chosen pallets' keys, in pick order
 var admin={users:[],log:[],msg:'',err:'',created:null,resetFor:null,armed:null};
 
 /* ---------- helpers ---------- */
@@ -18,7 +18,7 @@ function when(iso){return iso?new Date(iso).toLocaleString([], {month:'short',da
 function uid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function part(k){for(var i=0;i<state.parts.length;i++)if(state.parts[i].k===k)return state.parts[i];return null}
-function partName(p){return p.partId||p.number||'Unnamed part'}
+function partName(p){return p.number||p.partId||'Unnamed part'}
 function canEdit(){return me&&me.role!=='viewer'}
 function isAdmin(){return me&&me.role==='admin'}
 function dis(){return canEdit()?'':' disabled'}
@@ -178,7 +178,7 @@ function racking(T){
       lines.forEach(function(it,i){
         var id=addr+'-'+(it?i:'new');
         var d='data-r="'+ri+'" data-k="'+ki+'" data-l="'+li+'" data-i="'+(it?i:'new')+'"';
-        h+='<div class="line"><select id="sel-'+id+'" data-act="part" '+d+' aria-label="Part ID at '+addr+'"'+dis()+'><option value="">Select part ID</option>';
+        h+='<div class="line"><select id="sel-'+id+'" data-act="part" '+d+' aria-label="Part number at '+addr+'"'+dis()+'><option value="">Select part number</option>';
         state.parts.forEach(function(p){h+='<option value="'+esc(p.k)+'"'+(it&&it.part===p.k?' selected':'')+'>'+esc(partName(p))+'</option>'});
         h+='</select><input id="qty-'+id+'" class="num" type="number" inputmode="numeric" min="0" step="1" data-act="qty" '+d+' aria-label="Quantity at '+addr+'" value="'+(it&&it.qty!==''&&it.qty!=null?esc(it.qty):'')+'"'+(it&&it.part&&canEdit()?'':' disabled placeholder="Qty"')+'>';
         h+=it&&canEdit()?'<button class="x" data-act="rmline" '+d+' aria-label="Clear '+addr+'" title="Clear">×</button>':'<span></span>';
@@ -193,30 +193,30 @@ function racking(T){
 
 function master(T){
   var grand=0;state.parts.forEach(function(p){grand+=T.t[p.k]||0});
-  var ids={};state.parts.forEach(function(p){var n=(p.partId||'').trim().toLowerCase();if(n)ids[n]=(ids[n]||0)+1});
+  var ids={};state.parts.forEach(function(p){var n=(p.number||'').trim().toLowerCase();if(n)ids[n]=(ids[n]||0)+1});
   var h='<div class="stack">';
   h+='<div class="kpis"><div class="kpi"><span class="label">Parts on master</span><b class="num">'+state.parts.length+'</b></div>'+
      '<div class="kpi"><span class="label">Total quantity racked</span><b class="num">'+fmt(grand)+'</b></div>'+
      '<div class="kpi"><span class="label">Locations filled</span><b class="num">'+T.filled+' / '+T.slots+'</b></div></div>';
   h+='<div class="panel"><div class="panel-h"><h3>Metal Master</h3></div><div class="scroll"><table><thead><tr>'+
-     '<th style="min-width:190px">Part Number</th><th style="min-width:380px">Part Description</th><th style="min-width:130px">Part ID</th>'+
+     '<th style="min-width:190px">Part Number</th><th style="min-width:380px">Part Description</th>'+
      '<th class="r" style="min-width:90px">Qty / Pallet</th><th style="min-width:110px">Dedicated Case</th><th class="r" style="min-width:90px">Qty / Case</th>'+
      '<th class="r">Total Qty</th><th class="r">Locations</th><th class="r">Pallets</th>'+(canEdit()?'<th></th>':'')+'</tr></thead><tbody>';
-  if(!state.parts.length)h+='<tr><td colspan="10" class="empty-note">No parts yet.</td></tr>';
+  if(!state.parts.length)h+='<tr><td colspan="9" class="empty-note">No parts yet.</td></tr>';
   state.parts.forEach(function(p){
-    var tot=T.t[p.k]||0,loc=T.loc[p.k]||0,dup=(p.partId||'').trim()&&ids[p.partId.trim().toLowerCase()]>1;
+    var tot=T.t[p.k]||0,loc=T.loc[p.k]||0,dup=(p.number||'').trim()&&ids[p.number.trim().toLowerCase()]>1;
     function cell(f,cls,type,extra){return '<td'+(cls?' class="'+cls+'"':'')+'><input id="'+f+'-'+p.k+'" data-act="pf" data-p="'+p.k+'" data-f="'+f+'"'+(type?' type="number" min="0" inputmode="decimal" class="num"':'')+(extra||'')+dis()+' value="'+esc(p[f])+'" aria-label="'+f+'"></td>'}
-    h+='<tr>'+cell('number')+cell('description')+cell('partId','',false,dup?' class="bad" title="Another part already uses this Part ID"':'')+
+    h+='<tr>'+cell('number','',false,dup?' class="bad" title="Another part already uses this Part Number"':'')+cell('description')+
       cell('qtyPerPallet','r',true)+cell('dedicatedCase')+cell('qtyPerCase','r',true)+
       '<td class="r total num'+(tot?'':' zero')+'">'+fmt(tot)+'</td><td class="r num'+(loc?'':' zero')+'">'+loc+'</td>'+
       '<td class="r num'+(tot?'':' zero')+'">'+(num(p.qtyPerPallet)>0?fmt(tot/num(p.qtyPerPallet)):'–')+'</td>'+
       (canEdit()?'<td><button class="btn danger ghost'+(ui.armed===p.k?' armed':'')+'" data-act="delpart" data-p="'+p.k+'" style="white-space:nowrap">'+(ui.armed===p.k?(loc?'Remove + clear '+loc+' loc.':'Confirm'):'Remove')+'</button></td>':'')+'</tr>';
   });
-  h+='</tbody><tfoot><tr><td colspan="6">All parts</td><td class="r total num">'+fmt(grand)+'</td><td class="r num">'+T.filled+'</td><td colspan="'+(canEdit()?2:1)+'"></td></tr></tfoot></table></div>'+
+  h+='</tbody><tfoot><tr><td colspan="5">All parts</td><td class="r total num">'+fmt(grand)+'</td><td class="r num">'+T.filled+'</td><td colspan="'+(canEdit()?2:1)+'"></td></tr></tfoot></table></div>'+
      (canEdit()?'<div class="tablefoot"><button class="btn" data-act="addpart">+ Add part</button></div>':'')+'</div>';
   var secs=state.sections.filter(function(s){return s.rows.length});
   var grp=secs.length>1; // section headings only when more than one section is switched on
-  h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th'+(grp?' rowspan="2"':'')+'>Part ID</th>';
+  h+='<div class="panel"><div class="panel-h"><h3>Quantity by row</h3></div><div class="scroll"><table class="matrix"><thead><tr><th'+(grp?' rowspan="2"':'')+'>Part Number</th>';
   if(grp){secs.forEach(function(s){h+='<th class="sec" colspan="'+s.rows.length+'">'+esc(s.name)+'</th>'});
   h+='<th class="r" rowspan="2">Total</th></tr><tr>';}
   secs.forEach(function(s){s.rows.forEach(function(r){h+='<th class="r">Row '+esc(r.row)+'</th>'})});
@@ -231,64 +231,119 @@ function master(T){
 }
 
 /* ---------- material transfer ---------- */
-// Every pallet on the racking holding the chosen material, in racking order.
+// Every pallet on the racking holding the chosen material, in racking order. Transfers always move whole pallets.
 function pallets(k){
   var out=[],multi=state.sections.length>1;
   state.sections.forEach(function(s){s.rows.forEach(function(r){r.racks.forEach(function(rk){rk.levels.forEach(function(lv){
     lv.items.forEach(function(it,i){
-      if(it.part!==k)return;
+      if(it.part!==k||!(num(it.qty)>0))return;
       var loc=r.row+'-'+rk.rack+'-'+lv.level;
-      out.push({key:s.key+'|'+loc+'|'+i,section:s.key,row:r.row,rack:rk.rack,level:lv.level,qty:num(it.qty),loc:(multi?s.name+' ':'')+loc});
+      out.push({key:s.key+'|'+loc+'|'+i,section:s.key,row:r.row,rack:rk.rack,level:lv.level,item:i,qty:num(it.qty),addr:loc,loc:(multi?s.name+' ':'')+loc});
     });
   })})})});
   return out;
 }
-function xferQty(){var n=Number(xfer.qty);return xfer.qty!==''&&Number.isInteger(n)&&n>0?n:0}
+function xferQty(){var n=Number(xfer.qty);return xfer.qty!==''&&isFinite(n)&&n>0?n:0}
+// The picked pallets that still exist, in the order they were picked, and their total.
+function picked(list){
+  var by={};list.forEach(function(x){by[x.key]=x});
+  var out=xfer.picks.map(function(k){return by[k]}).filter(Boolean);
+  xfer.picks=out.map(function(x){return x.key});
+  return {list:out,total:out.reduce(function(t,x){return t+x.qty},0)};
+}
 function transferView(){
-  var h='<div class="stack"><div class="panel"><div class="panel-h"><h3>Transfer material</h3><p>Pick the material and quantity, choose a green pallet, then the machine it goes to.</p></div>';
-  h+='<div class="formrow"><div class="field grow"><label for="xf-part">Material type</label><select id="xf-part" data-act="xpart"><option value="">Select material type</option>';
+  var h='<div class="stack"><div class="panel"><div class="panel-h"><h3>Transfer material</h3><p>Pick the material and quantity, then choose one green pallet or enough yellow pallets to cover it. Whole pallets are moved.</p></div>';
+  h+='<div class="formrow"><div class="field grow"><label for="xf-part">Material type</label><select id="xf-part" data-act="xpart"><option value="">Select part number</option>';
   state.parts.forEach(function(p){h+='<option value="'+esc(p.k)+'"'+(xfer.part===p.k?' selected':'')+'>'+esc(partName(p))+'</option>'});
   h+='</select></div><div class="field"><label for="xf-qty">Quantity requested</label><input id="xf-qty" class="num" type="number" inputmode="numeric" min="1" step="1" data-act="xqty" value="'+esc(xfer.qty)+'"></div></div>';
   h+='</div><div id="xf-results" class="stack">'+transferResults()+'</div></div>';
   return h;
 }
 function transferResults(){
-  return (xfer.msg?'<p class="ok-msg" role="status">'+esc(xfer.msg)+'</p>':'')+transferTable();
-}
-function transferTable(){
-  if(!xfer.part||!part(xfer.part))return '<p class="empty-note">Select a material type to see where it is racked.</p>';
-  var q=xferQty(),list=pallets(xfer.part),p=part(xfer.part);
-  if(!list.some(function(x){return x.key===xfer.pick&&q&&x.qty>=q})){xfer.pick=null;xfer.machine=null}
-  var h='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets have at least '+fmt(q)+'. Only green pallets can be picked.':'Enter the quantity requested to see which pallets can fill it.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Material type</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
+  var h=xfer.msg?'<p class="ok-msg" role="status">'+esc(xfer.msg)+'</p>':'';
+  if(!xfer.part||!part(xfer.part))return h+'<p class="empty-note">Select a material type to see where it is racked.</p>';
+  var q=xferQty(),p=part(xfer.part),list=pallets(xfer.part);
+  if(!q)xfer.picks=[];
+  var P=picked(list),enough=q&&P.total>=q;
+  if(!enough)xfer.machine=null;
+  if(q){
+    var pct=Math.min(100,Math.round(P.total/q*100));
+    h+='<div class="tally'+(enough?' ok':'')+'"><span class="label">Selected / requested</span><b class="num">'+fmt(P.total)+' / '+fmt(q)+'</b>'+
+      '<span class="meter"><i style="width:'+pct+'%"></i></span><span class="dim">'+(enough?'Enough selected.':fmt(q-P.total)+' more needed.')+'</span></div>';
+  }
+  h+='<div class="panel"><div class="panel-h"><h3>'+esc(partName(p))+' on the racking</h3><p>'+(q?'Green pallets cover '+fmt(q)+' on their own. Yellow pallets have less and can be combined.':'Enter the quantity requested to choose pallets.')+'</p></div><div class="scroll"><table class="xfer"><thead><tr><th style="width:44px"></th><th>Part Number</th><th>Location</th><th class="r">Quantity</th></tr></thead><tbody>';
   if(!list.length)h+='<tr><td colspan="4" class="empty-note">No pallets of this material are on the racking.</td></tr>';
   list.forEach(function(x){
-    var ok=q&&x.qty>=q,sel=x.key===xfer.pick,cls=q?(ok?'go':'no'):'';
-    h+='<tr class="'+cls+(sel?' picked':'')+'"'+(ok?' data-act="xpick" data-v="'+esc(x.key)+'"':'')+'><td>'+
-      (ok?'<button class="pick" aria-pressed="'+sel+'" aria-label="Pick '+esc(x.loc)+'"></button>':'')+'</td>'+
+    var sel=xfer.picks.indexOf(x.key)>=0,cls=q?(x.qty>=q?'go':'part'):'';
+    h+='<tr class="'+cls+(sel?' picked':'')+'"'+(q?' data-act="xpick" data-v="'+esc(x.key)+'"':'')+'><td>'+
+      (q?'<button class="pick" aria-pressed="'+sel+'" aria-label="'+(sel?'Remove ':'Add ')+esc(x.loc)+'"></button>':'')+'</td>'+
       '<td>'+esc(partName(p))+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td class="r num"><b>'+fmt(x.qty)+'</b></td></tr>';
   });
   h+='</tbody></table></div></div>';
   if(xfer.err)h+='<p class="err" role="alert">'+esc(xfer.err)+'</p>';
-  if(!xfer.pick)return h;
-  var pk=list.filter(function(x){return x.key===xfer.pick})[0];
-  h+='<div class="panel"><div class="panel-h"><h3>Send to machine</h3><p>Pallet '+esc(pk.loc)+' · '+fmt(q)+' × '+esc(partName(p))+'</p></div><div class="machines">';
+  if(!q)return h;
+  h+='<div class="panel"><div class="panel-h"><h3>Selected pallets</h3></div><div class="scroll"><table><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th class="r">Quantity</th><th></th></tr></thead><tbody>';
+  if(!P.list.length)h+='<tr><td colspan="5" class="empty-note">No pallets selected yet. Pick pallets from the table above.</td></tr>';
+  P.list.forEach(function(x,i){h+='<tr><td class="num">'+(i+1)+'</td><td><span class="tagl inline">'+esc(x.loc)+'</span></td><td>'+esc(partName(p))+'</td><td class="r num">'+fmt(x.qty)+'</td><td class="r"><button class="btn ghost sm" data-act="xpick" data-v="'+esc(x.key)+'">Remove</button></td></tr>'});
+  h+='</tbody>'+(P.list.length?'<tfoot><tr><td colspan="3">Total of '+P.list.length+' pallet'+(P.list.length>1?'s':'')+'</td><td class="r num">'+fmt(P.total)+' / '+fmt(q)+'</td><td></td></tr></tfoot>':'')+'</table></div></div>';
+  if(!enough)return h;
+  h+='<div class="panel"><div class="panel-h"><h3>Send to machine</h3><p>'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · '+fmt(P.total)+' × '+esc(partName(p))+'</p></div><div class="machines">';
   MACHINES.forEach(function(m){h+='<button class="machine" data-act="xmachine" data-v="'+m+'" aria-pressed="'+(xfer.machine===m)+'">'+m+'</button>'});
   h+='</div><div class="tablefoot">';
   if(!canEdit())h+='<p class="dim">Your account can view but not transfer material.</p>';
   else if(dirty)h+='<p class="err">Save or undo your racking changes before transferring.</p>';
-  else h+='<button class="btn primary" data-act="xgo"'+(!xfer.machine||xfer.busy?' disabled':'')+'>'+(xfer.busy?'Transferring…':xfer.machine?'Transfer '+fmt(q)+' to '+xfer.machine:'Choose a machine')+'</button>';
-  return h+'</div></div>';
+  else h+='<button class="btn primary" data-act="xgo"'+(!xfer.machine||xfer.busy?' disabled':'')+'>'+(xfer.busy?'Transferring…':xfer.machine?'Transfer '+P.list.length+' pallet'+(P.list.length>1?'s':'')+' to '+xfer.machine:'Choose a machine')+'</button>';
+  h+='</div></div>';
+  if(xfer.machine)h+='<div class="panel"><div class="panel-h"><h3>Ready for print</h3><p>Pick sheet for this transfer. It fits on one 8.5 × 11 in page.</p><button class="btn" data-act="xprint">Print</button></div><div class="sheet-wrap">'+pickSheet(p,q,P)+'</div></div>';
+  return h;
+}
+// One-page pick sheet: each rack row holding a selected pallet drawn as a grid (racks across, levels top to bottom), then the pick list.
+function pickSheet(p,q,P){
+  var num_={};P.list.forEach(function(x,i){num_[x.section+'|'+x.addr]=i+1});
+  var h='<div class="sheet"><div class="sheet-h"><div><b>Material transfer</b><span>'+esc(when(new Date().toISOString()))+' · '+esc(me.id)+'</span></div><div class="to">To <b>'+esc(xfer.machine)+'</b></div></div>';
+  h+='<p class="sheet-part"><b>'+esc(partName(p))+'</b>'+(p.description?' · '+esc(p.description):'')+'</p>';
+  h+='<div class="sheet-racks">';
+  state.sections.forEach(function(s){s.rows.forEach(function(r){
+    if(!P.list.some(function(x){return x.section===s.key&&String(x.row)===String(r.row)}))return;
+    var all={};r.racks.forEach(function(rk){rk.levels.forEach(function(lv){all[lv.level]=1})});
+    var lvls=Object.keys(all).map(Number).sort(function(a,b){return b-a});
+    h+='<div class="sheet-row"><div class="sheet-row-h">'+(state.sections.length>1?esc(s.name)+' · ':'')+'Row '+esc(r.row)+'</div><table class="rackmap"><thead><tr><th></th>';
+    r.racks.forEach(function(rk){h+='<th>Rack '+esc(rk.rack)+'</th>'});
+    h+='</tr></thead><tbody>';
+    lvls.forEach(function(n){
+      h+='<tr><th>L'+n+'</th>';
+      r.racks.forEach(function(rk){
+        var lv=rk.levels.filter(function(x){return x.level===n})[0],addr=r.row+'-'+rk.rack+'-'+n,k=num_[s.key+'|'+addr];
+        if(!lv)h+='<td class="none"></td>';
+        else if(k)h+='<td class="hit"><b>'+k+'</b> '+esc(addr)+'</td>';
+        else h+='<td class="'+(lv.items.length?'full':'')+'">'+esc(addr)+'</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+  })});
+  h+='</div><table class="sheet-list"><thead><tr><th>#</th><th>Location</th><th>Part Number</th><th class="r">Quantity</th><th>Machine</th><th>Done</th></tr></thead><tbody>';
+  P.list.forEach(function(x,i){h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.loc)+'</b></td><td>'+esc(partName(p))+'</td><td class="r">'+fmt(x.qty)+'</td><td>'+esc(xfer.machine)+'</td><td><span class="box"></span></td></tr>'});
+  h+='</tbody><tfoot><tr><td colspan="3">'+P.list.length+' pallet'+(P.list.length>1?'s':'')+' · requested '+fmt(q)+'</td><td class="r">'+fmt(P.total)+'</td><td>'+esc(xfer.machine)+'</td><td></td></tr></tfoot></table></div>';
+  return h;
+}
+function printSheet(){
+  var src=document.querySelector('#xf-results .sheet');if(!src)return;
+  var pr=document.getElementById('print-root');
+  if(!pr){pr=document.createElement('div');pr.id='print-root';document.body.appendChild(pr)}
+  pr.innerHTML=src.outerHTML;
+  window.print();
 }
 function refreshTransfer(){var el=document.getElementById('xf-results');if(el)el.innerHTML=transferResults()}
 function doTransfer(){
-  var q=xferQty(),pk=pallets(xfer.part).filter(function(x){return x.key===xfer.pick})[0];
-  if(!pk||!q||!xfer.machine||xfer.busy||dirty||!canEdit())return;
+  var q=xferQty(),P=picked(pallets(xfer.part));
+  if(!q||P.total<q||!xfer.machine||xfer.busy||dirty||!canEdit())return;
   xfer.busy=true;xfer.err='';xfer.msg='';refreshTransfer();
-  var m=xfer.machine;
-  api('POST','/api/transfer',{part:xfer.part,qty:q,machine:m,section:pk.section,row:pk.row,rack:pk.rack,level:pk.level})
+  var m=xfer.machine,name=partName(part(xfer.part)||{});
+  api('POST','/api/transfer',{part:xfer.part,requested:q,machine:m,pallets:P.list.map(function(x){return {section:x.section,row:x.row,rack:x.rack,level:x.level,item:x.item,qty:x.qty}})})
     .then(function(d){
       server=d;state=clone({parts:d.parts,sections:d.sections});newer=null;
-      xfer={part:xfer.part,qty:'',pick:null,machine:null,busy:false,err:'',msg:'Moved '+fmt(q)+' × '+partName(part(xfer.part)||{})+' from '+pk.loc+' to '+m+'.'};
+      xfer={part:xfer.part,qty:'',picks:[],machine:null,busy:false,err:'',msg:'Moved '+P.list.length+' pallet'+(P.list.length>1?'s':'')+' ('+fmt(P.total)+' × '+name+') from '+P.list.map(function(x){return x.loc}).join(', ')+' to '+m+'.'};
       render();
     })
     .catch(function(x){xfer.busy=false;if(x.silent)return;xfer.err=x.message;reloadLatest()});
@@ -313,7 +368,7 @@ function machinesView(){
   var log=(server.transfers||[]).slice(0,50);
   h+='<div class="panel"><div class="panel-h"><h3>Recent transfers</h3></div><div class="scroll"><table class="log"><thead><tr><th>When</th><th>User</th><th>Material type</th><th class="r">Qty</th><th>From</th><th>To</th></tr></thead><tbody>';
   if(!log.length)h+='<tr><td colspan="6" class="empty-note">No transfers yet.</td></tr>';
-  log.forEach(function(e){var p=part(e.part);h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+esc(p?partName(p):e.partId)+'</td><td class="r num">'+fmt(e.qty)+'</td><td>'+esc(e.from)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>'});
+  log.forEach(function(e){var p=part(e.part);h+='<tr><td class="dim">'+esc(when(e.at))+'</td><td>'+esc(e.by)+'</td><td>'+esc(p?partName(p):(e.partNumber||e.partId))+'</td><td class="r num">'+fmt(e.qty)+'</td><td>'+esc(e.from)+'</td><td><b>'+esc(e.machine)+'</b></td></tr>'});
   h+='</tbody></table></div></div></div>';
   return h;
 }
@@ -456,14 +511,15 @@ root.addEventListener('click',function(e){
   }
   else if(a==='refreshlog')loadAdmin();
   /* transfer actions */
-  else if(a==='xpick'){xfer.pick=t.dataset.v;xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer()}
+  else if(a==='xpick'){var pi=xfer.picks.indexOf(t.dataset.v);if(pi>=0)xfer.picks.splice(pi,1);else xfer.picks.push(t.dataset.v);xfer.err='';xfer.msg='';refreshTransfer()}
+  else if(a==='xprint')printSheet();
   else if(a==='xmachine'){xfer.machine=t.dataset.v;refreshTransfer()}
   else if(a==='xgo')doTransfer();
 });
 
 root.addEventListener('change',function(e){
   var t=e.target;
-  if(t.dataset.act==='xpart'){xfer.part=t.value;xfer.pick=null;xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer();return}
+  if(t.dataset.act==='xpart'){xfer.part=t.value;xfer.picks=[];xfer.machine=null;xfer.err='';xfer.msg='';refreshTransfer();return}
   if(t.dataset.act==='setrole'){adminDo(api('PATCH','/api/admin/users/'+encodeURIComponent(t.dataset.u),{role:t.value}),t.dataset.u+' is now '+t.value+'.');return}
   if(t.dataset.act!=='part'||!canEdit())return;
   var lv=lvOf(t),v=t.value,p=part(v);
@@ -487,7 +543,7 @@ root.addEventListener('input',function(e){
   }else if(a==='pf'){
     var p=part(t.dataset.p),f=t.dataset.f;if(!p)return;
     p[f]=t.type==='number'?(t.value===''?'':Math.max(0,num(t.value))):t.value;changed();
-    if(f==='qtyPerPallet'||f==='partId'){var id=t.id,pos=t.selectionStart;render();var n=document.getElementById(id);if(n){n.focus();try{if(pos!=null)n.setSelectionRange(pos,pos)}catch(x){}}}
+    if(f==='qtyPerPallet'||f==='number'){var id=t.id,pos=t.selectionStart;render();var n=document.getElementById(id);if(n){n.focus();try{if(pos!=null)n.setSelectionRange(pos,pos)}catch(x){}}}
   }
 });
 
