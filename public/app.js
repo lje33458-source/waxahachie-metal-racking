@@ -22,10 +22,11 @@ function uid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).sli
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function part(k){for(var i=0;i<state.parts.length;i++)if(state.parts[i].k===k)return state.parts[i];return null}
 function partName(p){return p.number||p.partId||'Unnamed part'}
-// Roles: admin does everything; Material Handler transfers and returns; Shipping and Receiving receives and returns; viewer reads.
+// Roles: admin does everything; Supervisor sees every tab but Admin and can receive, transfer and return, but not edit the racking;
+// Material Handler transfers and returns; Shipping and Receiving receives; viewer reads.
 // Only admins edit the racking and Master. The server checks the same rules.
-var ROLE_NAMES={viewer:'Viewer',handler:'Material Handler',shipping:'Shipping and Receiving',admin:'Admin'};
-var CAN={transfer:['admin','handler'],receive:['admin','shipping'],return:['admin','handler','shipping']};
+var ROLE_NAMES={viewer:'Viewer',supervisor:'Supervisor',handler:'Material Handler',shipping:'Shipping and Receiving',admin:'Admin'};
+var CAN={transfer:['admin','supervisor','handler'],receive:['admin','supervisor','shipping'],return:['admin','supervisor','handler']};
 function can(a){return !!me&&CAN[a].indexOf(me.role)>=0}
 function canEdit(){return isAdmin()}
 // Tabs each role sees, besides the racking sections.
@@ -33,8 +34,8 @@ function tabAllowed(k){
   if(!me)return false;
   var r=me.role;
   if(k==='admin')return r==='admin';
-  if(k==='master')return r==='admin'||r==='viewer';
-  if(k==='transfer')return r!=='shipping';
+  if(k==='master')return r==='admin'||r==='viewer'||r==='supervisor';
+  if(k==='transfer'||k==='machines')return r!=='shipping';
   if(k==='receive')return r!=='handler';
   return true;
 }
@@ -202,7 +203,8 @@ function racking(T){
         var d='data-r="'+ri+'" data-k="'+ki+'" data-l="'+li+'" data-i="'+(it?i:'new')+'"';
         h+='<div class="line"><select id="sel-'+id+'" data-act="part" '+d+' aria-label="Part number at '+addr+'"'+dis()+'><option value="">Select part number</option>';
         state.parts.forEach(function(p){h+='<option value="'+esc(p.k)+'"'+(it&&it.part===p.k?' selected':'')+'>'+esc(partName(p))+'</option>'});
-        h+='</select><input id="qty-'+id+'" class="num" type="number" inputmode="numeric" min="0" step="1" data-act="qty" '+d+' aria-label="Quantity at '+addr+'" value="'+(it&&it.qty!==''&&it.qty!=null?esc(it.qty):'')+'"'+(it&&it.part&&canEdit()?'':' disabled placeholder="Qty"')+'>';
+        // Supervisors see what is on each pallet but not its quantity.
+        h+='</select>'+(me.role==='supervisor'?'<span></span>':'<input id="qty-'+id+'" class="num" type="number" inputmode="numeric" min="0" step="1" data-act="qty" '+d+' aria-label="Quantity at '+addr+'" value="'+(it&&it.qty!==''&&it.qty!=null?esc(it.qty):'')+'"'+(it&&it.part&&canEdit()?'':' disabled placeholder="Qty"')+'>');
         h+=it&&canEdit()?'<button class="x" data-act="rmline" '+d+' aria-label="Clear '+addr+'" title="Clear">×</button>':'<span></span>';
         h+='</div>';
       });
@@ -663,7 +665,7 @@ function adminView(){
   var h='<div class="stack">';
   h+='<form class="panel" id="add-user-form"><div class="panel-h"><h3>Add user</h3></div>'+
     '<div class="formrow"><div class="field"><label for="nu-id">User ID</label><input id="nu-id" autocomplete="off" autocapitalize="none" spellcheck="false" required pattern="[A-Za-z0-9._\\-]{2,40}" title="2–40 letters, numbers, dots, dashes or underscores"></div>'+
-    '<div class="field"><label for="nu-role">Role</label><select id="nu-role">'+['handler','shipping','viewer','admin'].map(function(r){return '<option value="'+r+'">'+ROLE_NAMES[r]+'</option>'}).join('')+'</select></div>'+
+    '<div class="field"><label for="nu-role">Role</label><select id="nu-role">'+['handler','shipping','supervisor','viewer','admin'].map(function(r){return '<option value="'+r+'">'+ROLE_NAMES[r]+'</option>'}).join('')+'</select></div>'+
     '<div class="field grow"><label for="nu-pk">Passkey</label><div class="pkrow"><input id="nu-pk" autocomplete="new-password" minlength="8" required spellcheck="false"><button class="btn" type="button" data-act="genpk" data-for="nu-pk">Generate</button></div></div>'+
     '<button class="btn primary" type="submit">Add user</button></div>'+
     (admin.created?'<div class="notice" role="status"><span>Give <b>'+esc(admin.created.id)+'</b> this passkey. The app keeps only a scrambled copy, so it cannot be shown again.</span><code>'+esc(admin.created.pk)+'</code><button class="btn sm" type="button" data-act="copy" data-v="'+esc(admin.created.pk)+'">Copy</button><button class="btn ghost sm" type="button" data-act="dismiss">Done</button></div>':'')+
@@ -674,7 +676,7 @@ function adminView(){
   admin.users.forEach(function(u){
     var self=u.id===me.id,key=encodeURIComponent(u.id);
     h+='<tr><td><b>'+esc(u.id)+'</b>'+(self?' <span class="dim">(you)</span>':'')+'</td>'+
-      '<td><select data-act="setrole" data-u="'+esc(u.id)+'" aria-label="Role for '+esc(u.id)+'">'+['viewer','handler','shipping','admin'].map(function(r){return '<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+ROLE_NAMES[r]+'</option>'}).join('')+'</select></td>'+
+      '<td><select data-act="setrole" data-u="'+esc(u.id)+'" aria-label="Role for '+esc(u.id)+'">'+['viewer','handler','shipping','supervisor','admin'].map(function(r){return '<option value="'+r+'"'+(u.role===r?' selected':'')+'>'+ROLE_NAMES[r]+'</option>'}).join('')+'</select></td>'+
       '<td><span class="statuspill '+(u.active?'on':'off')+'">'+(u.active?'Active':'Disabled')+'</span></td>'+
       '<td class="dim">'+esc(when(u.lastLogin))+'</td><td class="dim">'+esc(when(u.createdAt))+(u.createdBy?' by '+esc(u.createdBy):'')+'</td><td>';
     if(admin.resetFor===u.id){

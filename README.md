@@ -15,7 +15,8 @@ Roles:
 |------------------------|----------------------------------------------|------------------------------------------|
 | Viewer                 | all but Admin                                | look only                                |
 | Material Handler       | Racking (view only), Transfer Material, Machine | transfer to machines, return to rack  |
-| Shipping and Receiving | Racking (view only), Receive Material, Machine  | receive material, return to rack      |
+| Shipping and Receiving | Racking (view only), Receive Material        | receive material                         |
+| Supervisor             | all but Admin; Racking view only, no pallet quantities there | receive, transfer, return to rack |
 | Admin                  | all, plus Pallet tracking                    | everything, incl. racking/Master edits and users |
 
 Accounts that were "Editor" become Material Handler automatically. The server enforces the same rules.
