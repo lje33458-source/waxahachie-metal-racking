@@ -23,5 +23,5 @@ http.createServer((req, res) => {
   res.end(fs.readFileSync(path.join(PUBLIC_DIR, hit[0])));
 }).listen(PORT, async () => {
   console.log('Americase Visual Inventory running on http://localhost:' + PORT + ' (storage: ' + api.store.kind + ')');
-  try { await api.getUsers(); } catch (e) { console.error(e.message); }
+  try { await api.ensureAdmin(); } catch (e) { console.error(e.message); }
 });

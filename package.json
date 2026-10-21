@@ -4,6 +4,14 @@
   "private": true,
   "description": "Shared metal racking locations and master parts list with passkey sign-in.",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "pg": "^8.23.1"
+  }
 }

@@ -17,6 +17,18 @@ function freePort() {
   });
 }
 
+async function freshDatabase() {
+  const { Client } = require('pg');
+  const name = 'wmr_test_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const c = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await c.connect();
+  await c.query('CREATE DATABASE ' + name);
+  await c.end();
+  const u = new URL(process.env.TEST_DATABASE_URL);
+  u.pathname = '/' + name;
+  return u.toString();
+}
+
 // Starts server.js. Uses a fresh DATA_DIR unless one is given; extra env vars (e.g. DATABASE_URL) pass through.
 async function startServer(opts = {}) {
   const port = await freePort();
@@ -24,7 +36,8 @@ async function startServer(opts = {}) {
   const env = Object.assign({}, process.env, { PORT: String(port), DATA_DIR: dataDir, ADMIN_PASSKEY }, opts.env || {});
   delete env.VERCEL;
   if (!opts.env || !('KV_REST_API_URL' in opts.env)) { delete env.KV_REST_API_URL; delete env.KV_REST_API_TOKEN; }
-  if (!opts.env || !('DATABASE_URL' in opts.env)) { if (process.env.TEST_DATABASE_URL) env.DATABASE_URL = process.env.TEST_DATABASE_URL; }
+  // TEST_DATABASE_URL: run against a real Postgres server, in a new empty database for each server started.
+  if (!opts.env || !('DATABASE_URL' in opts.env)) { delete env.DATABASE_URL; if (process.env.TEST_DATABASE_URL) env.DATABASE_URL = await freshDatabase(); }
   const proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   proc.stdout.on('data', d => { out += d; });
@@ -79,4 +92,4 @@ async function signIn(page, base, id, pk) {
   await page.waitForSelector('header.top');
 }
 
-module.exports = { startServer, client, api, adminClient, signIn, ADMIN_PASSKEY, ROOT };
+module.exports = { freshDatabase, startServer, client, api, adminClient, signIn, ADMIN_PASSKEY, ROOT };

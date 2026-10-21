@@ -201,7 +201,12 @@ test('transfer material: pick pallets oldest first, send to a machine', async ()
   const rowsText = await page.locator('table.xfer tbody tr').allTextContents();
   assert.equal(rowsText.length, 4);
   assert.deepEqual(rowsText.map(t => /Recommended/.test(t)), [true, true, false, false]);
-  if (process.env.EXPECT_NO_DUMMIES) assert.match(rowsText[0], /4-1-1/); // only received pallets have a date
+  if (process.env.EXPECT_NO_DUMMIES) {
+    // Only pallets given a date are dated: 2-1-9 (Sep 1, set under Pallet tracking), then 4-1-2 and 4-1-1 (Oct 1, racking order: top level first).
+    assert.match(rowsText[0], /Sep 1, 2026.*2-1-9/);
+    assert.match(rowsText[1], /Oct 1, 2026.*4-1-2/);
+    assert.match(rowsText[3], /–.*2-1-8/);
+  }
   await page.locator('table.xfer tbody tr[data-act="xpick"]', { hasText: '4-1-1' }).click();
   assert.match(await text('.tally'), /12 \/ 20/);
   await page.locator('table.xfer tbody tr[data-act="xpick"]', { hasText: '4-1-2' }).click();
@@ -255,6 +260,8 @@ test('master transfer log filters by machine and receiving', async () => {
 
 test('admin: add a user, change role, disable, reset passkey, delete', async () => {
   await tab('admin');
+  // The tab redraws once the user list arrives; wait for it before typing.
+  await page.waitForSelector('select[data-act="setrole"][data-u="admin"]');
   await page.fill('#nu-id', 'handler1');
   await page.selectOption('#nu-role', 'handler');
   await page.click('[data-act="genpk"][data-for="nu-pk"]');
