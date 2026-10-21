@@ -30,6 +30,7 @@
   ],
   "functions": {
     "api/index.js": {
+      "includeFiles": "lib/schema.sql",
       "excludeFiles": "node_modules/@electric-sql/**"
     }
   }
