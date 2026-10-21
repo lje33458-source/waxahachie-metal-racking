@@ -53,7 +53,7 @@ test('pallets start without made-up routing numbers or dates', async () => {
   const { at } = await rackPallets();
   const all = Object.values(at).flat();
   assert.equal(all.length, 8);
-  if (process.env.EXPECT_NO_DUMMIES) all.forEach(p => { assert.equal(p.routing, ''); assert.equal(p.received, ''); });
+  all.forEach(p => { assert.equal(p.routing, ''); assert.equal(p.received, ''); });
 });
 
 test('racking: assign a part to an empty level, save, reload', async () => {
@@ -201,12 +201,11 @@ test('transfer material: pick pallets oldest first, send to a machine', async ()
   const rowsText = await page.locator('table.xfer tbody tr').allTextContents();
   assert.equal(rowsText.length, 4);
   assert.deepEqual(rowsText.map(t => /Recommended/.test(t)), [true, true, false, false]);
-  if (process.env.EXPECT_NO_DUMMIES) {
-    // Only pallets given a date are dated: 2-1-9 (Sep 1, set under Pallet tracking), then 4-1-2 and 4-1-1 (Oct 1, racking order: top level first).
-    assert.match(rowsText[0], /Sep 1, 2026.*2-1-9/);
-    assert.match(rowsText[1], /Oct 1, 2026.*4-1-2/);
-    assert.match(rowsText[3], /–.*2-1-8/);
-  }
+  // Only pallets given a date are dated: 2-1-9 (Sep 1, set under Pallet tracking), then 4-1-2 and 4-1-1
+  // (Oct 1, racking order: top level first); undated last.
+  assert.match(rowsText[0], /Sep 1, 2026.*2-1-9/);
+  assert.match(rowsText[1], /Oct 1, 2026.*4-1-2/);
+  assert.match(rowsText[3], /–.*2-1-8/);
   await page.locator('table.xfer tbody tr[data-act="xpick"]', { hasText: '4-1-1' }).click();
   assert.match(await text('.tally'), /12 \/ 20/);
   await page.locator('table.xfer tbody tr[data-act="xpick"]', { hasText: '4-1-2' }).click();

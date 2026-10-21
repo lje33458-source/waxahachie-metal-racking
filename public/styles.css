@@ -287,3 +287,6 @@ td select{border:1px solid var(--line);background:var(--bg);border-radius:4px;pa
 .trash{color:var(--warn)}
 /* a confirm step that is waiting on the user */
 .confirm-step{outline:3px solid var(--ok);outline-offset:-3px;border-radius:8px;box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 22%,transparent)}
+
+/* admin: backup download */
+a.btn{display:inline-block;color:inherit;text-decoration:none}
