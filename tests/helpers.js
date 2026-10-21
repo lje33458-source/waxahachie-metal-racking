@@ -29,7 +29,8 @@ async function freshDatabase() {
   return u.toString();
 }
 
-// Starts server.js. Uses a fresh DATA_DIR unless one is given; extra env vars (e.g. DATABASE_URL) pass through.
+// Starts server.js (from opts.root, default this repo). Uses a fresh DATA_DIR unless one is given;
+// extra env vars (e.g. DATABASE_URL) pass through.
 async function startServer(opts = {}) {
   const port = await freePort();
   const dataDir = opts.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), 'wmr-test-'));
@@ -38,7 +39,7 @@ async function startServer(opts = {}) {
   if (!opts.env || !('KV_REST_API_URL' in opts.env)) { delete env.KV_REST_API_URL; delete env.KV_REST_API_TOKEN; }
   // TEST_DATABASE_URL: run against a real Postgres server, in a new empty database for each server started.
   if (!opts.env || !('DATABASE_URL' in opts.env)) { delete env.DATABASE_URL; if (process.env.TEST_DATABASE_URL) env.DATABASE_URL = await freshDatabase(); }
-  const proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const proc = spawn(process.execPath, ['server.js'], { cwd: opts.root || ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   proc.stdout.on('data', d => { out += d; });
   proc.stderr.on('data', d => { out += d; });
@@ -51,7 +52,7 @@ async function startServer(opts = {}) {
   // The first request after start creates the admin account, so wait until signing in works.
   await api(base, 'GET', '/api/me');
   return {
-    base, port, dataDir, proc,
+    base, port, dataDir, proc, dbUrl: env.DATABASE_URL,
     log: () => out,
     stop: () => new Promise(resolve => { if (proc.exitCode != null) return resolve(); proc.on('exit', resolve); proc.kill('SIGTERM'); }),
   };
