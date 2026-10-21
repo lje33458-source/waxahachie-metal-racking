@@ -1,23 +1,29 @@
 # Americase Visual Inventory: code map
 
-Plain Node 18, no packages. Changes go straight to `main`; Vercel deploys on push.
-Read only the section you need: `grep -n "^/\* ---------- " public/app.js` and `grep -n "if (p === '/api" lib/api.js` list them with line numbers.
+Node 20+, two packages (`pg`, `@electric-sql/pglite`), no build step. Changes go to `main`; Vercel deploys on push.
+Read only the section you need: `grep -n "if (p === '/api" lib/api.js` lists the routes; each page module starts with a comment saying what it holds.
 
-## Files
-- `lib/api.js`: every API route (one `route()` function), data cleaning, migrations. `lib/store.js`: Upstash Redis or JSON files.
-- `public/app.js`: the whole page, one IIFE. HTML is built as strings; one click/change/input listener each at the bottom (`/* events */`) dispatches on `data-act`.
-- `public/styles.css`: base styles first, then one block per feature, in the order they were added.
-- `server.js`: local server. `api/index.js` + `vercel.json`: Vercel.
+## Server
+- `lib/api.js`: every API route (one `route()` function), sign-in, roles, data checks. Builds the next racking document and hands it to the store.
+- `lib/store.js`: all database access. Builds the racking document from the tables, and on save writes only the rows that changed, in one transaction with a version check. Also users, logs, failed sign-ins, backup export.
+- `lib/schema.sql`: the tables, history triggers and reporting views. Bump `SCHEMA_VERSION` in store.js when changing it.
+- `lib/db.js`: Postgres via `DATABASE_URL`, else embedded PGlite in `DATA_DIR/pgdata`.
+- `lib/legacy.js`: reads the old Redis / JSON-file data for the one-time copy into an empty database; writes it back for a rollback (`scripts/rollback-to-redis.js`).
+- `server.js`: local server (serves `public/`). `api/index.js` + `vercel.json`: Vercel.
+- `docs/DATABASE.md`: tables and every query per endpoint, for IT. Keep it in step with store.js.
 
-## public/app.js sections
-helpers · sign in · totals · render (tabs, racking, master) · material transfer (incl. `sheet()` print sheet) · receive material · machines (cards, return to rack) · logs (`LOGS`, `logPanel`) · pallet tracking · admin · saving (polling) · events · boot
+## Page (public/)
+ES modules, HTML built as strings. `js/main.js` boots; `state.js` (shared state), `model.js` (parts, pallets, totals, permissions),
+`render.js` (layout + tabs), `saving.js` (save, drafts, 20 s polling), `events.js` (actions), `api.js`.
+One file per tab in `js/views/`: racking (incl. Pallet tracking), master, transfer, receive, machines, logs, sheet (print sheets), admin, account (sign-in, passkey).
+Buttons and fields carry `data-act="name"`; the tab's module handles it with `on('click', 'name', target => …)`.
+`styles.css`: base styles first, then one block per feature, in the order they were added.
 
-## Data (Redis key `wmr:racking`, one JSON doc with a version)
-- `parts[]` {k, number (Part Number, shown everywhere), description, partId (hidden), qtyPerPallet, …}
-- `sections[]` {key, name, rows[{row, racks[{rack, levels[{level, height, items[pallet]}]}]}]}; pallet = {part, qty, routing, received}
-- `machines` {EMK|EMLK|P4|L5: [pallet at machine, with `from` spot, `batch`, `requested`]}
-- Transfer log: Redis list `wmr:transfers` (kinds transfer, return, receive). Admin activity: `wmr:audit`.
-- Writes go through `store.saveRacking(baseVersion, doc)`; build `next` with parts, sections + parked, machines, migrations.
+## Data
+Document shape the page uses (`GET /api/data`): `{version, parts[], sections[{key, name, rows[{row, racks[{rack, label, levels[{level, height, items[pallet]}]}]}]}], machines{EMK|EMLK|P4|L5: [pallet + from, batch, requested]}}`; pallet = `{id, part, qty, routing, received}`.
+Tables: parts, sections, rack_rows, racks, levels, pallets (racking or machine), stock_moves (transfer log), activity (admin log), users, history (every change, by trigger).
+Writes: `store.saveRacking(baseVersion, next, { by, move, activity })`; build `next` with `nextDoc()` in api.js. Pallets keep their `id` across moves.
 
 ## Test locally
-`DATA_DIR=<scratch dir> ADMIN_PASSKEY=testpass123 PORT=3111 node server.js`, then drive it with Playwright (Chromium at /opt/pw-browsers, `NODE_PATH=/opt/node-tools/node_modules`).
+`npm install`, then `NODE_PATH=/opt/node-tools/node_modules npm test` (Playwright + Chromium at /opt/pw-browsers).
+Real Postgres: add `TEST_DATABASE_URL=postgres://…`. Manual run: `DATA_DIR=<scratch dir> ADMIN_PASSKEY=testpass123 PORT=3111 node server.js`.
