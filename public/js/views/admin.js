@@ -12,7 +12,7 @@ const admin = { users: [], log: [], msg: '', err: '', created: null, resetFor: n
 const ACTIONS = {
   'login': 'Signed in', 'login-failed': 'Failed sign-in', 'save': 'Saved racking', 'create-user': 'Added user', 'update-user': 'Changed user',
   'delete-user': 'Deleted user', 'change-passkey': 'Changed own passkey', 'transfer': 'Transferred material', 'return': 'Returned to rack',
-  'undo-transfers': 'Undid all transfers', 'import': 'Copied old data', 'export': 'Downloaded backup',
+  'undo-transfers': 'Undid all transfers', 'import': 'Copied old data', 'import-warning': 'Old data changed after copy', 'export': 'Downloaded backup',
 };
 const ROLE_ORDER_NEW = ['handler', 'shipping', 'supervisor', 'viewer', 'admin']; // most likely first when adding
 const ROLE_ORDER = ['viewer', 'handler', 'shipping', 'supervisor', 'admin'];

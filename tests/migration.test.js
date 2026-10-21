@@ -139,10 +139,20 @@ test('first start copies old Redis data in; a backup rolls back to the old app',
   cleanup.push(redis.close);
   const before = redis.kv.get('wmr:racking');
   const env = { KV_REST_API_URL: redis.url, KV_REST_API_TOKEN: 'test-token' };
-  const srv = await startServer({ env });
-  cleanup.push(srv.stop);
-  const c = await checkImported(srv, 'Redis');
+  const first = await startServer({ env });
+  cleanup.push(first.stop);
+  await checkImported(first, 'Redis');
   assert.equal(redis.kv.get('wmr:racking'), before, 'Redis left as it was');
+
+  // The old app saving after the copy is noticed on the next start.
+  redis.kv.set('wmr:racking:version', '45');
+  await first.stop();
+  const srv = await startServer({ env: Object.assign({}, env, process.env.TEST_DATABASE_URL ? { DATABASE_URL: first.dbUrl } : {}), dataDir: first.dataDir });
+  cleanup.push(srv.stop);
+  const c = await adminClient(srv.base);
+  const warning = (await c.call('GET', '/api/admin/audit')).body.entries.find(e => e.action === 'import-warning');
+  assert.match(warning.detail, /Redis has racking version 45, newer than version 41 that was copied/);
+  redis.kv.set('wmr:racking:version', '41');
 
   // Work in the new app: a transfer back from EMK.
   const d = (await c.call('GET', '/api/data')).body;

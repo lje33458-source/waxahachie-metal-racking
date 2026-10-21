@@ -54,7 +54,7 @@ async function startServer(opts = {}) {
   return {
     base, port, dataDir, proc, dbUrl: env.DATABASE_URL,
     log: () => out,
-    stop: () => new Promise(resolve => { if (proc.exitCode != null) return resolve(); proc.on('exit', resolve); proc.kill('SIGTERM'); }),
+    stop: () => new Promise(resolve => { if (proc.exitCode != null || proc.signalCode != null) return resolve(); proc.on('exit', resolve); proc.kill('SIGTERM'); }),
   };
 }
 
